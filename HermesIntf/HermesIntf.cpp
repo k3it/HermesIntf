@@ -64,7 +64,7 @@ namespace HermesIntf
 			gSampleRate = 192000;
 		} else {
 			// unknown sample rate
-			if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Unknown sample rate");
+			rt_exception("Unknown sample rate");
 			return(FALSE);
 		} 
 
@@ -84,7 +84,7 @@ namespace HermesIntf
 			// have we memory ?
 			if (gData[i] == NULL) 
 			{// low memory
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Low memory");
+				rt_exception("Low memory");
 				return(FALSE);
 			} 
 
@@ -100,9 +100,7 @@ namespace HermesIntf
 
 	DWORD WINAPI Worker(LPVOID lpParameter)
 	{
-		//bool Over;
-		//DWORD OutLen;
-		//float *iptr[2*MAX_RX_COUNT];
+		
 		Cmplx *optr[MAX_RX_COUNT];
 		int gNChan = myHermes.rxCount;
 
@@ -116,10 +114,6 @@ namespace HermesIntf
 		// wait for a while ...
 		Sleep(100);
 
-		/* Set the socket to blocking */
-		//unsigned long blocking = 0;    /* Flag to make socket blocking */
-		//assert(ioctlsocket(myHermes.sock, FIONBIO, &blocking) == 0);
-		
 		// prepare pointers to IQ buffer
 		gDataSamples = 0;
 		for (i = 0; i < gNChan; i++) optr[i] = gData[i];
@@ -128,10 +122,8 @@ namespace HermesIntf
 		int recvbufflen = 1500;
 		int len = sizeof(struct sockaddr_in);
 
-		write_text_to_log_file("Worker thread running:");
-		write_text_to_log_file(std::to_string(gNChan));
-
-		
+		write_text_to_log_file("Worker thread running");
+			
 
 		// main loop
 		while (!gStopFlag)
@@ -139,14 +131,12 @@ namespace HermesIntf
 
 			// read data block
 			bytes_received=0;
-			//bytes_received = recvfrom(myHermes.sock,recvbuff,recvbufflen,0,(sockaddr *)&myHermes.Hermes_addr,&len);
 		
 			bytes_received = recv(myHermes.sock,recvbuff,recvbufflen,0);
 
 			if (WSAGetLastError() == WSAETIMEDOUT)
 			{
-				write_text_to_log_file("UDP socket timeout");
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Timeout waiting for UDP data");
+				rt_exception("Timed out waiting for UDP data");
 				return(FALSE);
 			}
 
@@ -167,8 +157,7 @@ namespace HermesIntf
 				if ( recvbuff[8] != SYNC || recvbuff[9] != SYNC || recvbuff[10] != SYNC || 
 					 recvbuff[520] != SYNC || recvbuff[521] != SYNC || recvbuff[522] != SYNC )
 				{
-					write_text_to_log_file("Loss of Sync detected");
-					if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Loss of Sync on HPSDR frames");
+					rt_exception("Loss of Sync on HPSDR frames");
 					return(FALSE);
 					//continue;
 				}
@@ -180,9 +169,7 @@ namespace HermesIntf
 					{
 						for (j = 0; j < gNChan; j++)
 						{
-							//smplI = (recvbuff[indx] << 24) + (recvbuff[indx+1] << 16) + (recvbuff[indx+2] << 8);
-							//smplQ = (recvbuff[indx+3] << 24) + (recvbuff[indx+4] << 16) + (recvbuff[indx+5] << 8);
-
+		
 							smplI = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
 							smplQ = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
 
@@ -190,13 +177,12 @@ namespace HermesIntf
 							optr[j]->Im = -smplQ*256;
 							//advance to the next sample
 							(optr[j])++;
-							//indx += 6;
-
+		
 						}
 						gDataSamples++;
 						indx += 2; //skip two mic bytes
 
-						// have we enough data ?
+						// do we have enough data ?
 						if (gDataSamples >= gBlockInSamples)
 						{
 							// start filling of new data
@@ -207,7 +193,7 @@ namespace HermesIntf
 							
 						}
 					}
-					//start of the second frame
+					//start of the second UDP frame
 					indx = 528;
 				}
 
@@ -216,25 +202,12 @@ namespace HermesIntf
 
 		Sleep(10);
 
-		//cleanup
-		/* for (i = 0; i < gNChan; i++)
-		{// allocated ?
-			if (gData[i] != NULL) free(gData[i]);
-			gData[i] = NULL;
-			if (optr[i] != NULL) free(optr[i]);
-			optr[i] = NULL;
-		}
-
-
-		write_text_to_log_file("Worker thread exit");
-		*/
-		// that's all
 		return(0);
 	}
 
 
 
-	// DllMain function
+	// DllMain function - Do we need this?
 	BOOL APIENTRY DllMain( HMODULE hModule,	DWORD  ul_reason_for_call, LPVOID lpReserved)
 	{
 		switch (ul_reason_for_call)
@@ -255,13 +228,11 @@ namespace HermesIntf
 	{
 		HERMESINTF_API void __stdcall GetSdrInfo(PSdrInfo pInfo)
 		{
-			// have we info ?
+			// did we get info ?
 			if (pInfo == NULL) return;
 
-			std::string dbg = "GetSdrInfo ";
+			std::string dbg = "GetSdrInfo: ";
 			char display_name[50];
-
-			//write_text_to_log_file("GetSdrInfo got called");
 
 			if (myHermes.Discover() == 0) {
 
@@ -271,17 +242,21 @@ namespace HermesIntf
 				pInfo->ExactRates[RATE_96KHZ]  =  96e3;
 				pInfo->ExactRates[RATE_192KHZ] = 192e3;
 
-				dbg+=(myHermes.devname);
-				dbg+=(myHermes.ip_addr);
-				dbg+=(myHermes.mac);
-				dbg+=(myHermes.status);
+				dbg+=(myHermes.devname); dbg+=" ";
+				dbg+=(myHermes.ip_addr); dbg+=" ";
+				dbg+=(myHermes.mac); dbg+=" ";
+				dbg+=(myHermes.status); dbg+=" v";
 				dbg+=(std::to_string(myHermes.ver));
 				write_text_to_log_file(dbg);
 				pInfo->DeviceName = display_name;
 			} else {
 				pInfo->DeviceName = "Unknown HPSDR";
+				dbg += "No response from HPSDR";
 			}
+			write_text_to_log_file(dbg);
 		}
+
+		
 
 		// Start receivers
 		HERMESINTF_API void __stdcall StartRx(PSdrSettings pSettings)
@@ -297,13 +272,13 @@ namespace HermesIntf
 			gSet.RateID &= 0xFF;
 
 			if (myHermes.status == NULL) {
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Can't locate an HPSDR device");
+				rt_exception("Can't locate HPSDR device");
 				return;
 			} else if (myHermes.status != "Idle") {
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "HPSDR is busy sending data");
+				rt_exception("HPSDR is busy sending data");
 				return;
 			} else if (myHermes.ver < 24) {
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Check FPGA firmware version");
+				rt_exception("Check FPGA firmware version");
 				return;
 			}
 
@@ -312,6 +287,8 @@ namespace HermesIntf
 			write_text_to_log_file(std::to_string(gSet.RecvCount));
 
 			myHermes.StartCapture(gSet.RecvCount,gSet.RateID);
+
+			
 
 			// allocate buffers & others
 			if (!Alloc()) 
@@ -326,7 +303,7 @@ namespace HermesIntf
 			if (ghWrk == NULL)
 			{
 				// can't start
-				if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "Can't start worker thread");
+				rt_exception("Can't start worker thread");
 				return;
 			}
 		}
@@ -347,7 +324,7 @@ namespace HermesIntf
 			}
 
 			myHermes.StopCapture();
-			write_text_to_log_file("StopRx got called");
+			write_text_to_log_file("StopRx");
 		}
 
 		// Set Rx frequency
@@ -364,8 +341,7 @@ namespace HermesIntf
 			dbg += " Frequency: ";
 			dbg += std::to_string(Frequency);
 			write_text_to_log_file(dbg);
-			//write_text_to_log_file(std::to_string(Frequency));
-
+			
 		}
 
 		HERMESINTF_API int __stdcall ReadPort(int PortNumber)
@@ -387,6 +363,22 @@ namespace HermesIntf
 			"HermesIntf_log_file.txt", std::ios_base::out | std::ios_base::app );
 		log_file << GetTickCount() << ": " << text << std::endl;
 	}
+
+	void rt_exception(const std::string &text)
+	{
+		const char *error = text.c_str();
+		
+		write_text_to_log_file(text);
+		
+		//kill thread if running
+		gStopFlag = true;
+		
+		//send error to the server
+		if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, (char *) error);
+		
+		return;
+	}
+
 
 }
 

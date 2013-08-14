@@ -22,7 +22,8 @@ namespace HermesIntf
 		// Initialize Winsock
 		int iResult = WSAStartup(MAKEWORD(2,2), &wsaData); /* Load Winsock 2.0 DLL */
 	    if (iResult != NO_ERROR) {
-		    throw  ("Error at WSASTartup()");
+		    rt_exception("Error at WSASTartup()");
+			return;
 		}
 
 		//SOCKET sock;
@@ -49,14 +50,20 @@ namespace HermesIntf
 		Skimmer_addr.sin_port         = htons(0);    
 		Skimmer_addr.sin_addr.s_addr  = INADDR_ANY; 
 		
-		bind(sock,(sockaddr*)&Skimmer_addr, sizeof (Skimmer_addr));
+		if (bind(sock,(sockaddr*)&Skimmer_addr, sizeof (Skimmer_addr)) != 0) 
+		{
+			rt_exception("UDP Socket Bind Error");
+			return;
+		}
 
-		write_text_to_log_file("constructor called");
+
+
+		//write_text_to_log_file("constructor called");
 	}
 
 	Hermes::~Hermes(void)
 	{
-		write_text_to_log_file("destructor called");
+		//write_text_to_log_file("destructor called");
 		StopCapture();
 		closesocket(sock);
 		WSACleanup();
@@ -149,34 +156,11 @@ namespace HermesIntf
 		//C4: number of RX, Alex Tx Relay: Tx1, Duplex
 		cfgBytes.C4 = 0x04 | ((RxCount-1) << 3);
 
-		//cfgMSG[11] = C0;
-		//cfgMSG[12] = C1;
-		//cfgMSG[13] = C2;
-		//cfgMSG[14] = C3;
-		//cfgMSG[15] = C4;
-
-		//fast forward to the next frame
-		//now three sync packets
-		//cfgMSG[520] = (char) SYNC;
-		//cfgMSG[521] = (char) SYNC;
-		//cfgMSG[522] = (char) SYNC;
-
-		//five configuration packets C0-C4
-		//C0 - set NCO of the first receiver.  Set to 3 141 592
-		//C0 = 0x04;
-		//C1 = 0x00; C2 = 0x2F; C3 = 0xFD; C4 = 0xD8;
-
-		//cfgMSG[523] = C0;
-		//cfgMSG[524] = C1;
-		//cfgMSG[525] = C2;
-		//cfgMSG[526] = C3;
-		//cfgMSG[527] = C4;
 
 		//fire up this baby
-		//assert(sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr))>0);
 		for (int i = 0; i < RxCount; i++) 
 		{
-			//set all to 10 MHz
+			//set all rcvrs to 10 MHz
 			SetLO(i,10000000);
 		};
 			
@@ -277,7 +261,7 @@ namespace HermesIntf
 			}
 		}
 
-		/* reset the socket to blocking */
+		/* restore socket to blocking */
 		nonblocking = 0;    /* Flag to make socket blocking */
 		ioctlsocket(sock, FIONBIO, &nonblocking);
 
@@ -352,6 +336,7 @@ namespace HermesIntf
 		//send the payload twice
 		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
 		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
+		
 		//sleep a little, let NCO settle
 		Sleep(10);
 		return 0;
