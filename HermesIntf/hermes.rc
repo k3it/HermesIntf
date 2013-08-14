@@ -23,7 +23,7 @@ FILETYPE 1
 			VALUE "OriginalFilename", "HermesIntf.dll"
 			VALUE "CompanyName", "Zibatek,Inc."
 			VALUE "FileVersion", "Debug"
-			VALUE "LegalCopyright", "Copyright (c) 2013, K3IT"
+			VALUE "LegalCopyright", "Vasiliy Gokoyev K3IT, 2013"
 			VALUE "ProductName", "HPSDR Skimmer Server Interface"
 			VALUE "ProductVersion", "Debug"
 		}
@@ -40,7 +40,7 @@ FILETYPE 1
 			VALUE "OriginalFilename", "HermesIntf.dll"
 			VALUE "CompanyName", "Zibatek,Inc."
 			VALUE "FileVersion", "13.8.9"
-			VALUE "LegalCopyright", "Copyright (c) 2013, K3IT"
+			VALUE "LegalCopyright", "Vasiliy Gokoyev K3IT, 2013"
 			VALUE "ProductName", "HPSDR Skimmer Server Interface"
 			VALUE "ProductVersion", "13.8.9"
 		}

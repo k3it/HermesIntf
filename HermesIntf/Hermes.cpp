@@ -18,8 +18,13 @@ namespace HermesIntf
 		//reset sequence number
 		ResetSeq();
 
-		WSAStartup(MAKEWORD(2,2), &wsaData); /* Load Winsock 2.0 DLL */
-		
+		//---------------------------------------
+		// Initialize Winsock
+		int iResult = WSAStartup(MAKEWORD(2,2), &wsaData); /* Load Winsock 2.0 DLL */
+	    if (iResult != NO_ERROR) {
+		    throw  ("Error at WSASTartup()");
+		}
+
 		//SOCKET sock;
 		sock = socket(AF_INET,SOCK_DGRAM,0);
 		
@@ -27,16 +32,12 @@ namespace HermesIntf
  
 		char broadcast = '1';
 		
-		assert(setsockopt(sock,SOL_SOCKET,SO_BROADCAST,&broadcast,sizeof(broadcast))==0);
+		setsockopt(sock,SOL_SOCKET,SO_BROADCAST,&broadcast,sizeof(broadcast));
 
 		//set a 2 second timeout
 		DWORD iTimeout;
 		iTimeout = 2000;
-		assert(setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(const char*)&iTimeout,sizeof(iTimeout)) == 0);
-
-		
-		//struct sockaddr_in Hermes_addr;   
-		//struct sockaddr_in Skimmer_addr; 
+		setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(const char*)&iTimeout,sizeof(iTimeout));
 
 		Hermes_addr.sin_family       = AF_INET;         
 		Hermes_addr.sin_port         = htons(MYPORT);    
@@ -48,7 +49,7 @@ namespace HermesIntf
 		Skimmer_addr.sin_port         = htons(0);    
 		Skimmer_addr.sin_addr.s_addr  = INADDR_ANY; 
 		
-		assert(bind(sock,(sockaddr*)&Skimmer_addr, sizeof (Skimmer_addr)) == 0);
+		bind(sock,(sockaddr*)&Skimmer_addr, sizeof (Skimmer_addr));
 
 		write_text_to_log_file("constructor called");
 	}
@@ -80,7 +81,7 @@ namespace HermesIntf
 		sendMSG[2] = (char) 0x04;
 		sendMSG[3] = (char) 0x00;
 
-		assert(sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr))>0);
+		sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
 
 		//reset frame seq num
 		ResetSeq();
@@ -180,7 +181,7 @@ namespace HermesIntf
 		};
 			
 		//start
-		assert(sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr))>0);
+		sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
 		
 		return 0;
 	}
@@ -188,10 +189,10 @@ namespace HermesIntf
 
 	int Hermes::Discover(void)
 	{
-		//assert(0>1 && "discover called");
+		
 		int len = sizeof(struct sockaddr_in);
  
-		char recvbuff[1500];
+		char recvbuff[1500] = {0};
 		int recvbufflen = 1500;
 		char sendMSG[63] = {0};
 		sendMSG[0] = (char) 0xEF;
@@ -200,9 +201,10 @@ namespace HermesIntf
 
 		/* Set the socket to nonblocking */
 		unsigned long nonblocking = 1;    /* Flag to make socket nonblocking */
- 		assert(ioctlsocket(sock, FIONBIO, &nonblocking) == 0);
+ 		ioctlsocket(sock, FIONBIO, &nonblocking);
 
-		assert(sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr))>0);
+		Sleep(10);
+		sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
 		
 		//write_text_to_log_file(std::to_string(WSAGetLastError())); 
 
@@ -216,7 +218,7 @@ namespace HermesIntf
 
 			if (recvfrom(sock,recvbuff,recvbufflen,0,(sockaddr *)&Hermes_addr,&len)<0) 
 			{
-				assert(WSAGetLastError() == WSAEWOULDBLOCK);
+				//WSAGetLastError() == WSAEWOULDBLOCK;
 				Sleep(10);
 			} else {
 
@@ -277,7 +279,7 @@ namespace HermesIntf
 
 		/* reset the socket to blocking */
 		nonblocking = 0;    /* Flag to make socket blocking */
-		assert(ioctlsocket(sock, FIONBIO, &nonblocking) == 0);
+		ioctlsocket(sock, FIONBIO, &nonblocking);
 
 
 		if (devname != NULL) 
@@ -348,8 +350,8 @@ namespace HermesIntf
 		cfgMSG[527] = C4;
 
 		//send the payload twice
-		assert(sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr))>0);
-		assert(sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr))>0);
+		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
+		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
 		//sleep a little, let NCO settle
 		Sleep(10);
 		return 0;
