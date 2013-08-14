@@ -1,0 +1,9 @@
+
+LIBRARY   HERMESINTF
+EXPORTS
+   GetSdrInfo=_GetSdrInfo@4
+   StartRx=_StartRx@4
+   StopRx=_StopRx@0
+   SetRxFrequency=_SetRxFrequency@8
+   SetCtrlBits=_SetCtrlBits@4
+   ReadPort=_ReadPort@4

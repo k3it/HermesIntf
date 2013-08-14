@@ -1,0 +1,52 @@
+1 VERSIONINFO
+#ifdef _DEBUG
+#include <winver.h>
+FILEFLAGS VS_FF_DEBUG
+FILEVERSION 9999, 99, 99, 0
+PRODUCTVERSION 9999, 99, 99, 0
+#else
+FILEFLAGS 32
+//Note: personally, I prefer to set major to the year, minor to the month, and
+//revision to the day. I find it much more useful than version numbers.
+FILEVERSION 13, 8, 13, 0
+PRODUCTVERSION 13, 8, 13, 0
+#endif
+
+FILEOS 4
+FILETYPE 1
+
+#ifdef _DEBUG
+{
+	BLOCK "StringFileInfo" {
+		BLOCK "040904B0" {
+			VALUE "FileDescription", "HPSDR Skimmer Server Interface"
+			VALUE "OriginalFilename", "HermesIntf.dll"
+			VALUE "CompanyName", "Zibatek,Inc."
+			VALUE "FileVersion", "Debug"
+			VALUE "LegalCopyright", "Copyright (c) 2013, K3IT"
+			VALUE "ProductName", "HPSDR Skimmer Server Interface"
+			VALUE "ProductVersion", "Debug"
+		}
+	}
+	BLOCK "VarFileInfo" {
+		VALUE "Translation", 0x0409, 0x04B0
+	}
+}
+#else
+{
+	BLOCK "StringFileInfo" {
+		BLOCK "040904B0" {
+			VALUE "FileDescription", "HPSDR Skimmer Server Interface"
+			VALUE "OriginalFilename", "HermesIntf.dll"
+			VALUE "CompanyName", "Zibatek,Inc."
+			VALUE "FileVersion", "13.8.9"
+			VALUE "LegalCopyright", "Copyright (c) 2013, K3IT"
+			VALUE "ProductName", "HPSDR Skimmer Server Interface"
+			VALUE "ProductVersion", "13.8.9"
+		}
+	}
+	BLOCK "VarFileInfo" {
+		VALUE "Translation", 0x0409, 0x04B0
+	}
+}
+#endif 
