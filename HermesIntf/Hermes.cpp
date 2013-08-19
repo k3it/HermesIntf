@@ -29,8 +29,6 @@ namespace HermesIntf
 		//SOCKET sock;
 		sock = socket(AF_INET,SOCK_DGRAM,0);
 		
-		
- 
 		char broadcast = '1';
 		
 		setsockopt(sock,SOL_SOCKET,SO_BROADCAST,&broadcast,sizeof(broadcast));

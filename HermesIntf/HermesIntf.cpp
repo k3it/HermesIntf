@@ -109,7 +109,7 @@ namespace HermesIntf
 		const int framesPerPacket = 2;
 
 		int i,j,k,bytes_received;
-		int smplI, smplQ;
+		//int smplI, smplQ;
 
 		// wait for a while ...
 		Sleep(100);
@@ -123,8 +123,9 @@ namespace HermesIntf
 		int len = sizeof(struct sockaddr_in);
 
 		//packet sequence numbers
-		 int last_seq=1000;
-		int rx_seq = 0;
+		unsigned last_seq=0;
+		unsigned int rx_seq = 0;
+		unsigned int lost_pkts = 0;
 		DWORD last_error = GetTickCount();
 		
 
@@ -137,7 +138,9 @@ namespace HermesIntf
 
 			// read data block
 				
-			bytes_received = recv(myHermes.sock,recvbuff,recvbufflen,0);
+			//bytes_received = recv(myHermes.sock,recvbuff,recvbufflen,0);
+
+			bytes_received = recvfrom(myHermes.sock,recvbuff,recvbufflen,0,(sockaddr *)&myHermes.Hermes_addr,&len);
 
 			if (bytes_received <= 0 && WSAGetLastError() == WSAETIMEDOUT)
 			{
@@ -145,8 +148,11 @@ namespace HermesIntf
 				return(FALSE);
 			}
 
-			//check if this is a EP6 frame from metis
+			 if (myHermes.Hermes_addr.sin_port == htons(12345)) {
+				rt_exception("Got a magic packet");
+			}
 
+			
 			//verify sequence #
 			
 			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
@@ -169,12 +175,36 @@ namespace HermesIntf
 
 			*/
 
-			if (bytes_received > 0 && recvbuff != NULL && recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE && recvbuff[2] == (char)0x01 && recvbuff[3] == (char) 0x06)
+			//check if this is a EP6 frame from metis
+
+			 if (bytes_received > 0 && recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE && recvbuff[2] == (char)0x01 && recvbuff[3] == (char) 0x06)
 			{
 				
 				
 				//process UDP packet
 				int indx = 16;  //start of samples in recvbuff
+
+
+				
+				/* Debug code for checking sequence numbers
+			
+				rx_seq = recvbuff[4] << 24 | recvbuff[5] << 16 | recvbuff[6] << 8 | recvbuff[7];
+			
+				if ( rx_seq != last_seq+1) 
+				{
+					lost_pkts++;
+				}
+
+				last_seq = rx_seq;
+
+				if (GetTickCount() - last_error >= 20000)
+				{
+					//rt_exception("Loosing packets!!!");
+					write_text_to_log_file(std::to_string(lost_pkts));
+					last_error = GetTickCount();
+				}
+
+				*/
 
 				//check for ADC overload
 				//if (recvbuff[12] & (1<<0) == 1) {
@@ -199,14 +229,10 @@ namespace HermesIntf
 					{
 						for (j = 0; j < gNChan; j++)
 						{
-							
-							smplI = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
-							smplQ = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
-							
-							//optr[j]->Re = smplI*256;
-							//optr[j]->Im = -smplQ*256;
-							optr[j]->Re = smplI;
-							optr[j]->Im = -smplQ;
+																			
+							optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8;
+							optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8);
+												 
 							//advance to the next sample
 							(optr[j])++;
 		
@@ -217,11 +243,12 @@ namespace HermesIntf
 						// do we have enough data ?
 						if (gDataSamples >= gBlockInSamples)
 						{
-							// start filling of new data
-							gDataSamples = 0;
-							for (int kount = 0; kount < gNChan; kount++) optr[kount] = gData[kount];
+							
 							// yes -> report it
+							gDataSamples = 0;
 							if (gSet.pIQProc != NULL) (*gSet.pIQProc)(gSet.THandle, gData);
+							// start filling of new data
+							for (int kount = 0; kount < gNChan; kount++) optr[kount] = gData[kount];
 							
 						}
 					}

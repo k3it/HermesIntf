@@ -8,8 +8,8 @@ PRODUCTVERSION 9999, 99, 99, 0
 FILEFLAGS 32
 //Note: personally, I prefer to set major to the year, minor to the month, and
 //revision to the day. I find it much more useful than version numbers.
-FILEVERSION 13, 8, 13, 0
-PRODUCTVERSION 13, 8, 13, 0
+FILEVERSION 13, 8, 19, 0
+PRODUCTVERSION 13, 8, 19, 0
 #endif
 
 FILEOS 4
