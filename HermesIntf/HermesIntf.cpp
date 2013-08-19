@@ -122,6 +122,12 @@ namespace HermesIntf
 		int recvbufflen = 1500;
 		int len = sizeof(struct sockaddr_in);
 
+		//packet sequence numbers
+		 int last_seq=1000;
+		int rx_seq = 0;
+		DWORD last_error = GetTickCount();
+		
+
 		write_text_to_log_file("Worker thread running");
 			
 
@@ -130,19 +136,43 @@ namespace HermesIntf
 		{
 
 			// read data block
-			bytes_received=0;
-		
+				
 			bytes_received = recv(myHermes.sock,recvbuff,recvbufflen,0);
 
-			if (WSAGetLastError() == WSAETIMEDOUT)
+			if (bytes_received <= 0 && WSAGetLastError() == WSAETIMEDOUT)
 			{
 				rt_exception("Timed out waiting for UDP data");
 				return(FALSE);
 			}
 
 			//check if this is a EP6 frame from metis
+
+			//verify sequence #
+			
+			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
+					
+			rx_seq = (recvbuff[4] << 24) + (recvbuff[5] << 16) + (recvbuff[6] << 8) + recvbuff[7];
+			 rx_seq++;
+
+			if (GetTickCount() - last_error >= 10000)
+			{
+				//rt_exception("Loosing packets!!!");
+			//write_text_to_log_file(std::to_string(rx_seq));
+				write_text_to_log_file(std::to_string(rx_seq*samplesPerFrame/5));
+				last_error = GetTickCount();
+				rx_seq=0;
+			}
+
+			//last_seq = rx_seq;
+
+			//continue;
+
+			*/
+
 			if (bytes_received > 0 && recvbuff != NULL && recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE && recvbuff[2] == (char)0x01 && recvbuff[3] == (char) 0x06)
 			{
+				
+				
 				//process UDP packet
 				int indx = 16;  //start of samples in recvbuff
 
@@ -169,12 +199,14 @@ namespace HermesIntf
 					{
 						for (j = 0; j < gNChan; j++)
 						{
-		
+							
 							smplI = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
 							smplQ = (recvbuff[indx++] << 24) + (recvbuff[indx++] << 16) + (recvbuff[indx++] << 8);
-
-							optr[j]->Re = smplI*256;
-							optr[j]->Im = -smplQ*256;
+							
+							//optr[j]->Re = smplI*256;
+							//optr[j]->Im = -smplQ*256;
+							optr[j]->Re = smplI;
+							optr[j]->Im = -smplQ;
 							//advance to the next sample
 							(optr[j])++;
 		
@@ -197,7 +229,8 @@ namespace HermesIntf
 					indx = 528;
 				}
 
-			}
+			} 
+			
 		}
 
 		Sleep(10);
@@ -367,6 +400,7 @@ namespace HermesIntf
 	void rt_exception(const std::string &text)
 	{
 		const char *error = text.c_str();
+		if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, (char *) error);	
 		
 		write_text_to_log_file(text);
 		

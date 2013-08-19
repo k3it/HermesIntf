@@ -40,6 +40,9 @@ namespace HermesIntf
 		iTimeout = 2000;
 		setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(const char*)&iTimeout,sizeof(iTimeout));
 
+		int const buff_size = 65536;
+		setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (const char*)(&buff_size), sizeof(buff_size));
+
 		Hermes_addr.sin_family       = AF_INET;         
 		Hermes_addr.sin_port         = htons(MYPORT);    
 		Hermes_addr.sin_addr.s_addr  = INADDR_BROADCAST; 
