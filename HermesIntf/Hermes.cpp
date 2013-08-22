@@ -5,9 +5,10 @@
 #include "HermesIntf.h"
 
 #include <assert.h>
-//#include <Ws2tcpip.h>
+#include <Ws2tcpip.h>
 #include <stdio.h>
 #include <string>
+#include <iostream>
 
 namespace HermesIntf 
 {
@@ -184,12 +185,46 @@ namespace HermesIntf
 		sendMSG[1] = (char) 0xFE;
 		sendMSG[2] = (char) 0x02;
 
+
+		//send out broadcast from each interface
+		
+		/*
+		SOCKET sd = WSASocket(AF_INET, SOCK_DGRAM, 0, 0, 0, 0);
+		if (sd == SOCKET_ERROR) {
+			write_text_to_log_file("Failed to get a socket. sd ");
+			return 1;
+		}
+		*/
+
+		INTERFACE_INFO InterfaceList[20];
+		unsigned long nBytesReturned;
+		if (WSAIoctl(sock, SIO_GET_INTERFACE_LIST, 0, 0, &InterfaceList,
+			sizeof(InterfaceList), &nBytesReturned, 0, 0) == SOCKET_ERROR) {
+				write_text_to_log_file("Failed calling WSAIoctl");
+				return 1;
+		}
+
+		Sleep(10);
+		
+		int nNumInterfaces = nBytesReturned / sizeof(INTERFACE_INFO);
+		for (int i = 0; i < nNumInterfaces; ++i) 
+		{
+			sockaddr_in *pAddress, *pMask;
+			pAddress = (sockaddr_in *) & (InterfaceList[i].iiAddress); 
+			pMask = (sockaddr_in *) & (InterfaceList[i].iiNetmask);
+			bcast_addr.sin_addr.S_un.S_addr = pAddress->sin_addr.S_un.S_addr | (~ pMask->sin_addr.S_un.S_addr);
+			sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
+		
+			//write_text_to_log_file(inet_ntoa(pAddress->sin_addr));
+			//write_text_to_log_file(inet_ntoa(pMask->sin_addr));
+			//write_text_to_log_file(inet_ntoa(bcast_addr.sin_addr));
+		}
+
+		
 		/* Set the socket to nonblocking */
 		unsigned long nonblocking = 1;    /* Flag to make socket nonblocking */
  		ioctlsocket(sock, FIONBIO, &nonblocking);
 
-		Sleep(10);
-		sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
 		
 		//write_text_to_log_file(std::to_string(WSAGetLastError())); 
 

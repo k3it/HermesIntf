@@ -214,6 +214,8 @@ namespace HermesIntf
 		
 				
 				//check for sync bytes
+				
+				
 				if ( recvbuff[8] != SYNC || recvbuff[9] != SYNC || recvbuff[10] != SYNC || 
 					 recvbuff[520] != SYNC || recvbuff[521] != SYNC || recvbuff[522] != SYNC )
 				{
@@ -221,6 +223,7 @@ namespace HermesIntf
 					return(FALSE);
 					//continue;
 				}
+				
 
 				//process two HPSDR UDP frames
 				for (k = 0; k < framesPerPacket; k++) 
@@ -337,7 +340,10 @@ namespace HermesIntf
 			} else if (myHermes.status != "Idle") {
 				rt_exception("HPSDR is busy sending data");
 				return;
-			} else if (myHermes.ver < 24) {
+			} else if ((myHermes.devname == "Hermes" && myHermes.ver < 24) 
+				|| (myHermes.devname == "Metis" && myHermes.ver < 26) 
+				|| (myHermes.devname == "Angelia" && myHermes.ver < 19)) 
+			{
 				rt_exception("Check FPGA firmware version");
 				return;
 			}
