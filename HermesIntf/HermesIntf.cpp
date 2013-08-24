@@ -18,6 +18,8 @@ namespace HermesIntf
 	// Settings from Skimmer server
 	SdrSettings gSet;
 
+	volatile int ADC_overflow_count = 0;
+
 	// Sample rate of Skimmer server
 	int gSampleRate = 0;
 
@@ -36,6 +38,11 @@ namespace HermesIntf
 	//Handle & ID of worker thread
 	DWORD gidWrk = 0;
 	HANDLE ghWrk = NULL;
+
+	//Handle & ID of Agc thread
+	DWORD gidAgc = 0;
+	HANDLE ghAgc = NULL;
+
 
 	// Stop flag
 	volatile bool gStopFlag = false;
@@ -97,6 +104,36 @@ namespace HermesIntf
 		return(TRUE);
 	}
 
+	DWORD WINAPI Agc(LPVOID lpParameter)
+	{
+		//reset attenuator
+		myHermes.SetAtt(0);
+		int lastAttChange = GetTickCount();
+
+		while(!gStopFlag)
+		{
+			if (ADC_overflow_count > 0) 
+			{
+				//write_text_to_log_file("ADC Overload");
+				myHermes.IncrAtt();
+				Sleep(10);
+				ADC_overflow_count = 0;
+				lastAttChange = GetTickCount();
+			}
+
+			//gradually decrease attenuation
+			if (GetTickCount() - lastAttChange > 10000) {
+				myHermes.DecrAtt();
+				lastAttChange = GetTickCount();
+			}
+
+			Sleep(100);
+		}
+		
+		myHermes.SetAtt(0);
+		return(0);
+	}
+
 
 	DWORD WINAPI Worker(LPVOID lpParameter)
 	{
@@ -128,9 +165,7 @@ namespace HermesIntf
 		unsigned int lost_pkts = 0;
 		DWORD last_error = GetTickCount();
 		
-
-		write_text_to_log_file("Worker thread running");
-			
+	
 
 		// main loop
 		while (!gStopFlag)
@@ -145,7 +180,7 @@ namespace HermesIntf
 			if (bytes_received <= 0 && WSAGetLastError() == WSAETIMEDOUT)
 			{
 				rt_exception("Timed out waiting for UDP data");
-				return(FALSE);
+				break;
 			}
 
 			 if (myHermes.Hermes_addr.sin_port == htons(12345)) {
@@ -156,8 +191,8 @@ namespace HermesIntf
 			//verify sequence #
 			
 			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
-					
-			rx_seq = (recvbuff[4] << 24) + (recvbuff[5] << 16) + (recvbuff[6] << 8) + recvbuff[7];
+				
+			//rx_seq = (recvbuff[4] & 0xFF << 24) + (recvbuff[5] & 0xFF << 16) + (recvbuff[6] & 0xFF << 8) + recvbuff[7] & 0xFF;
 			 rx_seq++;
 
 			if (GetTickCount() - last_error >= 10000)
@@ -169,7 +204,7 @@ namespace HermesIntf
 				rx_seq=0;
 			}
 
-			//last_seq = rx_seq;
+			last_seq = rx_seq;
 
 			//continue;
 
@@ -206,11 +241,18 @@ namespace HermesIntf
 
 				*/
 
+				//check for PTT bit
+				if ( (recvbuff[11] & 0xFF) & (1<<0) == 1 || (recvbuff[523] & 0xFF) & (1<<0) == 1 ) {
+					//write_text_to_log_file("PTT!");
+					continue;
+				}
+
 				//check for ADC overload
-				//if (recvbuff[12] & (1<<0) == 1) {
-					// if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, "ADC Overload");
-					// return(FALSE);
-				//}
+				if ( (((recvbuff[11] & 0xFF) >> 3) == 0  && (recvbuff[12] & 0xFF)  & (1<<0) == 1) ||
+					 (((recvbuff[523] & 0xFF) >> 3) == 0 && (recvbuff[524] & 0xFF) & (1<<0) == 1) ) 
+				{
+					ADC_overflow_count++;
+				}
 		
 				
 				//check for sync bytes
@@ -233,9 +275,12 @@ namespace HermesIntf
 						for (j = 0; j < gNChan; j++)
 						{
 																			
-							optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8;
-							optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8);
-												 
+							//optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8;
+							//optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8);
+							
+							optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 16 | (recvbuff[indx++] & 0xFF) << 8 |  (recvbuff[indx++] & 0xFF) << 0;
+							optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 16 | (recvbuff[indx++] & 0xFF) << 8 |  (recvbuff[indx++] & 0xFF) << 0);
+							
 							//advance to the next sample
 							(optr[j])++;
 		
@@ -348,12 +393,11 @@ namespace HermesIntf
 				return;
 			}
 
-			write_text_to_log_file("StartRx");
-			write_text_to_log_file(std::to_string(gSet.RateID));
-			write_text_to_log_file(std::to_string(gSet.RecvCount));
-
+			
 			myHermes.StartCapture(gSet.RecvCount,gSet.RateID);
-
+			
+			write_text_to_log_file("StartRx");
+			
 			
 
 			// allocate buffers & others
@@ -372,6 +416,22 @@ namespace HermesIntf
 				rt_exception("Can't start worker thread");
 				return;
 			}
+			write_text_to_log_file("Worker thread running");
+		
+
+			
+			//for Hermes/Angelia start the AGC loop
+			if (myHermes.devname == "Hermes" || myHermes.devname == "Angelia") {
+
+				ghAgc = CreateThread(NULL, 0, Agc, NULL, 0, &gidAgc);
+				if (ghAgc == NULL)
+				{
+					rt_exception("Can't start AGC thread");
+					return;
+				}
+				write_text_to_log_file("AGC thread running");
+			}
+		
 		}
 
 		HERMESINTF_API void __stdcall StopRx(void) 
@@ -381,13 +441,29 @@ namespace HermesIntf
 			{// set stop flag
 				gStopFlag = true;
 
-				// wait for thread
+				// wait for threads
 				WaitForSingleObject(ghWrk, 100);
-
+				
 				// close thread handle 
 				CloseHandle(ghWrk);
 				ghWrk = NULL;
+				write_text_to_log_file("Worker thread done");
 			}
+
+			//was agc thread started?
+			if (ghAgc != NULL)
+			{// set stop flag
+				gStopFlag = true;
+
+				// wait for thread
+				WaitForSingleObject(ghAgc, 200);
+
+				// close thread handle 
+				CloseHandle(ghAgc);
+				ghAgc = NULL;
+				write_text_to_log_file("AGC thread done");
+			}
+
 
 			myHermes.StopCapture();
 			write_text_to_log_file("StopRx");
@@ -438,10 +514,11 @@ namespace HermesIntf
 		write_text_to_log_file(text);
 		
 		//kill thread if running
-		gStopFlag = true;
+		//gStopFlag = true;
+		//StopRx();
 		
 		//send error to the server
-		if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, (char *) error);
+		//if (gSet.pErrorProc != NULL) (*gSet.pErrorProc)(gSet.THandle, (char *) error);
 		
 		return;
 	}

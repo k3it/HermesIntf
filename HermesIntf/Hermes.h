@@ -45,6 +45,12 @@ namespace HermesIntf
 		int Discover(void);
 		int SetLO(int RecvrID, int Frequency);
 
+		//Attenuator control functions
+		void SetAtt(int AttDb);
+		void SetMaxAtt(void);
+		void IncrAtt(void);
+		void DecrAtt(void);
+
 	private:	
 		WSADATA wsaData;  /* Structure for WinSock setup communication */
 		//struct sockaddr_in Hermes_addr;
@@ -54,6 +60,11 @@ namespace HermesIntf
 		
 		unsigned int NextSeq();
 		void ResetSeq();
+
+		//Attenuator variables
+		int Att;
+		int MaxAtt;
+		
 
 		struct {
 			char C0;

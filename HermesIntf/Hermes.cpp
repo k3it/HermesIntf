@@ -212,12 +212,13 @@ namespace HermesIntf
 			sockaddr_in *pAddress, *pMask;
 			pAddress = (sockaddr_in *) & (InterfaceList[i].iiAddress); 
 			pMask = (sockaddr_in *) & (InterfaceList[i].iiNetmask);
+			
+			//calculate magic broadcast address
 			bcast_addr.sin_addr.S_un.S_addr = pAddress->sin_addr.S_un.S_addr | (~ pMask->sin_addr.S_un.S_addr);
+			
+			//send discovery
 			sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
 		
-			//write_text_to_log_file(inet_ntoa(pAddress->sin_addr));
-			//write_text_to_log_file(inet_ntoa(pMask->sin_addr));
-			//write_text_to_log_file(inet_ntoa(bcast_addr.sin_addr));
 		}
 
 		
@@ -275,18 +276,26 @@ namespace HermesIntf
 				case 0x00:
 					devname = "Metis";
 					max_recvrs = 4;
+					Att = 0;
+					MaxAtt = 0;
 					break;
 				case 0x01:
 					devname = "Hermes";
 					max_recvrs = 5;
+					Att = 0;
+					MaxAtt = 31;
 					break;
 				case 0x02:
 					devname = "Griffin";
-					max_recvrs = 1;
+					max_recvrs = 2;
+					Att = 0;
+					MaxAtt = 31;
 					break;
 				case 0x04:
 					devname = "Angelia";
 					max_recvrs = 5;
+					Att = 0;
+					MaxAtt = 31;
 					break;
 				default:
 					devname = "Unknown brd ID";
@@ -378,4 +387,106 @@ namespace HermesIntf
 		return 0;
 		
 	}
+		
+		void Hermes::SetAtt(int AttDb) 
+		{
+			if (AttDb >= 0 && AttDb <= MaxAtt) 
+			{
+				//send attenuator message
+				//Configuration packet
+				char cfgMSG[1032] = {0};
+
+				//Metis packet hdr
+				cfgMSG[0] = (char) 0xEF;
+				cfgMSG[1] = (char) 0xFE;
+				cfgMSG[2] = (char) 0x01;
+
+				//End point EP2
+				cfgMSG[3] = (char) 0x02;
+
+				//next 4 bytes is the sequence num
+				unsigned int seq = NextSeq();
+				cfgMSG[4] = seq >> 24 & 0xFF;
+				cfgMSG[5] = seq >> 8 & 0xFF;
+				cfgMSG[6] = seq >> 16 & 0xFF;
+				cfgMSG[7] = seq & 0xFF;
+
+				//now three sync packets
+				cfgMSG[8] = (char) SYNC;
+				cfgMSG[9] = (char) SYNC;
+				cfgMSG[10] = (char) SYNC;
+
+				//five configuration packets C0-C4
+
+				//C0 MOX False, Select Hermes Attenuator
+				char C0 = (char) 0x14;
+				char C1 = (char) 0x00;
+				char C2 = (char) 0x00;
+				char C3 = (char) 0x00;
+				char C4 = (char) 0x00;
+				
+				if (AttDb != 0) {
+					//enable and set att
+					C4 = (char) (1 << 5)  | AttDb;
+					Att = AttDb;
+				}
+
+				cfgMSG[11] = C0;
+				cfgMSG[12] = C1;
+				cfgMSG[13] = C2;
+				cfgMSG[14] = C3;
+				cfgMSG[15] = C4;
+
+				//fast forward to the next frame
+				//now three sync packets
+				cfgMSG[520] = (char) SYNC;
+				cfgMSG[521] = (char) SYNC;
+				cfgMSG[522] = (char) SYNC;
+
+				//five configuration packets C0-C4
+				//set C0 to Angelia second Att if needed
+
+				if (devname == "Angelia") {
+					C0 = (char) 0x16;
+					C1 = C4;
+					C4 = (char) 0x00;
+				}
+
+				cfgMSG[523] = C0;
+				cfgMSG[524] = C1;
+				cfgMSG[525] = C2;
+				cfgMSG[526] = C3;
+				cfgMSG[527] = C4;
+
+				//send the payload twice
+				sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
+				sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
+
+				Att = AttDb;
+
+				//debug
+				//write_text_to_log_file("Attenuator set");
+				//write_text_to_log_file(std::to_string(Att));
+			}
+			return;
+		}
+		
+		void Hermes::SetMaxAtt(void) {
+			SetAtt(MaxAtt);
+			return;
+		}
+
+		void Hermes::IncrAtt(void) {
+			if (Att < MaxAtt) {
+				SetAtt(Att+1);
+			}
+			return;
+		}
+
+		void Hermes::DecrAtt(void) {
+			if (Att > 0) {
+				SetAtt(Att-1);
+			}
+			return;
+		}
 }
