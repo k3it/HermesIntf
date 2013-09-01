@@ -207,18 +207,23 @@ namespace HermesIntf
 		Sleep(10);
 		
 		int nNumInterfaces = nBytesReturned / sizeof(INTERFACE_INFO);
+
+		//check if destination address is specified in the DLL name
+		//e.g. HermesIntf_192.168.111.222.dll
+		
+
 		for (int i = 0; i < nNumInterfaces; ++i) 
 		{
 			sockaddr_in *pAddress, *pMask;
 			pAddress = (sockaddr_in *) & (InterfaceList[i].iiAddress); 
 			pMask = (sockaddr_in *) & (InterfaceList[i].iiNetmask);
-			
+
 			//calculate magic broadcast address
 			bcast_addr.sin_addr.S_un.S_addr = pAddress->sin_addr.S_un.S_addr | (~ pMask->sin_addr.S_un.S_addr);
-			
+
 			//send discovery
 			sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
-		
+
 		}
 
 		
@@ -257,6 +262,17 @@ namespace HermesIntf
 						recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
 
 					ip_addr = inet_ntoa(Hermes_addr.sin_addr);
+
+					if (setBcastDest() == 0 && Hermes_addr.sin_addr.S_un.S_addr != Desired_addr.sin_addr.S_un.S_addr) 
+					{
+						continue;
+					} else if (setMacDest() == 0 && ((recvbuff[7] & 0xFF) != Desired_mac[0] 
+								|| (recvbuff[8] & 0xFF) != Desired_mac[1]) ) 
+					{
+						continue;
+					}
+
+					
 					ver = recvbuff[9];
 
 					if (recvbuff[2] == (char)0x02)
@@ -489,4 +505,84 @@ namespace HermesIntf
 			}
 			return;
 		}
+
+		int Hermes::setBcastDest(void) {
+
+			//this function looks at the name of the dll file and attempts to extract the broadcast destination
+			
+
+
+			char szFileName[MAX_PATH];
+			char fname[_MAX_FNAME];
+			
+			HMODULE hm = NULL;
+
+			if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				(LPCSTR) &StopRx, 
+				&hm))
+			{
+				int ret = GetLastError();
+				write_text_to_log_file("GetModuleHandle failed");
+				return 1;
+			}
+			
+			GetModuleFileNameA(hm, szFileName, sizeof szFileName);
+			_splitpath(szFileName,NULL,NULL,fname,NULL);
+
+			std::string bcast_dest = fname;
+			int location = bcast_dest.find_last_of("_");
+			if (location != std::string::npos) {
+				bcast_dest = bcast_dest.substr(location+1);
+				//write_text_to_log_file(bcast_dest);
+				if (inet_pton(AF_INET,bcast_dest.c_str(),&(Desired_addr.sin_addr)) == 1){
+					write_text_to_log_file("IP Address DLL Filter found");
+					return 0;
+				}
+			}
+			//could not parse the address
+			return 1;
+
+		}
+
+		int Hermes::setMacDest(void) {
+
+			//this function looks at the name of the dll file and attempts to extract the MAC destination
+			
+			char szFileName[MAX_PATH];
+			char fname[_MAX_FNAME];
+
+			
+
+			
+			HMODULE hm = NULL;
+
+			if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				(LPCSTR) &StopRx, 
+				&hm))
+			{
+				int ret = GetLastError();
+				write_text_to_log_file("GetModuleHandle failed");
+				return 1;
+			}
+			
+			GetModuleFileNameA(hm, szFileName, sizeof szFileName);
+			_splitpath(szFileName,NULL,NULL,fname,NULL);
+
+			std::string mac_dest = fname;
+			int location = mac_dest.find_last_of("_");
+			if (location != std::string::npos) {
+				mac_dest = mac_dest.substr(location+1);
+				//write_text_to_log_file(mac_dest);
+				if (mac_dest.size() == 4){
+					if (sscanf((char *) &mac_dest, "%2hhx%2hhx", &Desired_mac[0], &Desired_mac[1]) == 2);
+					write_text_to_log_file("MAC Address DLL Filter found");
+					return 0;
+				}
+			}
+			//could not parse the address
+			return 1;
+
+		}
+
+
 }

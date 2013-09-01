@@ -55,8 +55,10 @@ namespace HermesIntf
 		WSADATA wsaData;  /* Structure for WinSock setup communication */
 		//struct sockaddr_in Hermes_addr;
 		struct sockaddr_in bcast_addr;
+		struct sockaddr_in Desired_addr;
 		struct sockaddr_in Skimmer_addr; 
 		unsigned int seq_no;
+		char Desired_mac[2];
 		
 		unsigned int NextSeq();
 		void ResetSeq();
@@ -65,6 +67,8 @@ namespace HermesIntf
 		int Att;
 		int MaxAtt;
 		
+		int setBcastDest(void);
+		int setMacDest(void);
 
 		struct {
 			char C0;

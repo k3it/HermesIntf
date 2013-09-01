@@ -38,10 +38,10 @@
     <ClCompile Include="HermesIntf.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="dllmain.cpp">
+    <ClCompile Include="Hermes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Hermes.cpp">
+    <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

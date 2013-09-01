@@ -15,6 +15,7 @@ namespace HermesIntf
 	///////////////////////////////////////////////////////////////////////////////
 	// Global variables
 
+	
 	// Settings from Skimmer server
 	SdrSettings gSet;
 
@@ -146,7 +147,7 @@ namespace HermesIntf
 		const int framesPerPacket = 2;
 
 		int i,j,k,bytes_received;
-		//int smplI, smplQ;
+		int smplI, smplQ;
 
 		// wait for a while ...
 		Sleep(100);
@@ -161,9 +162,11 @@ namespace HermesIntf
 
 		//packet sequence numbers
 		unsigned last_seq=0;
-		unsigned int rx_seq = 0;
+		unsigned long rx_seq = 0;
 		unsigned int lost_pkts = 0;
+		unsigned long elapsed = 0;
 		DWORD last_error = GetTickCount();
+		DWORD start_time = GetTickCount();
 		
 	
 
@@ -188,37 +191,15 @@ namespace HermesIntf
 			}
 
 			
-			//verify sequence #
 			
-			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
-				
-			//rx_seq = (recvbuff[4] & 0xFF << 24) + (recvbuff[5] & 0xFF << 16) + (recvbuff[6] & 0xFF << 8) + recvbuff[7] & 0xFF;
-			 rx_seq++;
-
-			if (GetTickCount() - last_error >= 10000)
-			{
-				//rt_exception("Loosing packets!!!");
-			//write_text_to_log_file(std::to_string(rx_seq));
-				write_text_to_log_file(std::to_string(rx_seq*samplesPerFrame/5));
-				last_error = GetTickCount();
-				rx_seq=0;
-			}
-
-			last_seq = rx_seq;
-
-			//continue;
-
-			*/
-
 			//check if this is a EP6 frame from metis
 
-			 if (bytes_received > 0 && recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE && recvbuff[2] == (char)0x01 && recvbuff[3] == (char) 0x06)
+			 if (bytes_received > 0 && recvbuff[0] == (char) 0xEF && recvbuff[1] == (char) 0xFE && recvbuff[2] == (char) 0x01 && recvbuff[3] == (char) 0x06)
 			{
 				
 				
 				//process UDP packet
 				int indx = 16;  //start of samples in recvbuff
-
 
 				
 				/* Debug code for checking sequence numbers
@@ -275,13 +256,40 @@ namespace HermesIntf
 						for (j = 0; j < gNChan; j++)
 						{
 																			
-							//optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8;
-							//optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 24 | (recvbuff[indx++] & 0xFF) << 16 |  (recvbuff[indx++] & 0xFF) << 8);
+							//smplI = ((recvbuff[indx++] & 0xFF) << 16) | ((recvbuff[indx++] & 0xFF) << 8) |  ((recvbuff[indx++] & 0xFF) << 0);
+							//smplQ = ((recvbuff[indx++] & 0xFF) << 16) | ((recvbuff[indx++] & 0xFF) << 8) |  ((recvbuff[indx++] & 0xFF) << 0);
 							
-							optr[j]->Re =   (recvbuff[indx++] & 0xFF) << 16 | (recvbuff[indx++] & 0xFF) << 8 |  (recvbuff[indx++] & 0xFF) << 0;
-							optr[j]->Im = -((recvbuff[indx++] & 0xFF) << 16 | (recvbuff[indx++] & 0xFF) << 8 |  (recvbuff[indx++] & 0xFF) << 0);
+							//smplI =   (recvbuff[indx++]  << 16)  | (recvbuff[indx++]  << 8) |  (recvbuff[indx++]  << 0);
+							//smplQ = -((recvbuff[indx++]  << 16) | (recvbuff[indx++]  << 8 ) |  (recvbuff[indx++] << 0));
 							
+							
+
+							//smplI = 12345;
+							//smplQ = 32101;
+
+							smplI = (recvbuff[indx] & 0xFF) << 24 | (recvbuff[indx+1] & 0xFF) << 16 | (recvbuff[indx+2] & 0xFF) << 8;
+							smplQ = (recvbuff[indx+3] & 0xFF) << 24 | (recvbuff[indx+4] & 0xFF) << 16 | (recvbuff[indx+5] & 0xFF) << 8;
+
+							optr[j]->Re =  smplI;
+							optr[j]->Im = -smplQ;
+
+							/*
+							char s_smplI[25]={0};
+							char s_smplQ[25]={0};
+							sprintf(s_smplI, "I: %02X:%02X:%02X, %i",
+								recvbuff[indx-6] & 0xFF, recvbuff[indx-5] & 0xFF, recvbuff[indx-4] & 0xFF, smplI);
+							sprintf(s_smplQ, "Q: %02X:%02X:%02X, %i",
+								recvbuff[indx-3] & 0xFF, recvbuff[indx-2] & 0xFF, recvbuff[indx-1] & 0xFF, smplQ);
+
+
+							write_text_to_log_file(s_smplI);
+							//write_text_to_log_file(std::to_string(smplI));
+							write_text_to_log_file(s_smplQ);
+							//write_text_to_log_file(std::to_string(smplQ));
+							
+							*/
 							//advance to the next sample
+							indx+=6;
 							(optr[j])++;
 		
 						}
@@ -302,9 +310,39 @@ namespace HermesIntf
 					}
 					//start of the second UDP frame
 					indx = 528;
+
+					
 				}
 
-			} 
+			}
+
+			 //verify sequence #
+			
+			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
+				
+			//rx_seq = (recvbuff[4] & 0xFF << 24) + (recvbuff[5] & 0xFF << 16) + (recvbuff[6] & 0xFF << 8) + recvbuff[7] & 0xFF;
+			
+			 rx_seq++;
+			 elapsed = GetTickCount()-start_time;
+			 
+
+			if (GetTickCount() - last_error >= 10000)
+			{
+				//rt_exception("Loosing packets!!!");
+			//write_text_to_log_file(std::to_string(rx_seq));
+				write_text_to_log_file(std::to_string(rx_seq*samplesPerFrame*2*1000/elapsed ));
+				last_error = GetTickCount();
+				rx_seq=0;
+				start_time = last_error;
+				
+			}
+
+			//last_seq = rx_seq;
+
+			//continue;
+
+			*/
+
 			
 		}
 
@@ -316,6 +354,7 @@ namespace HermesIntf
 
 
 	// DllMain function - Do we need this?
+	
 	BOOL APIENTRY DllMain( HMODULE hModule,	DWORD  ul_reason_for_call, LPVOID lpReserved)
 	{
 		switch (ul_reason_for_call)
@@ -329,8 +368,10 @@ namespace HermesIntf
 		case DLL_PROCESS_DETACH:
 			break;
 		}
+
 		return TRUE;
 	}
+	
 
 	extern "C" 
 	{
@@ -362,6 +403,10 @@ namespace HermesIntf
 				dbg += "No response from HPSDR";
 			}
 			write_text_to_log_file(dbg);
+
+		
+
+
 		}
 
 		
@@ -522,6 +567,8 @@ namespace HermesIntf
 		
 		return;
 	}
+
+	
 
 
 }

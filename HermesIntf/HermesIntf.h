@@ -6,11 +6,11 @@
 
 #include <fstream>
 
+#pragma once
+
 
 namespace HermesIntf
 {
-
-
 
     // This class is exported from the HermesIntf.dll
   //  class MyHermesIntf
