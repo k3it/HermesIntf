@@ -4,7 +4,16 @@
 #include <winsock2.h>
 
 
+
 #define WIN32_LEAN_AND_MEAN
+#define WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include <signal.h>
+#include <stdlib.h>
+#include <tchar.h>
+#include <csignal>
+#include <iostream>
+#include <cstdlib>
 
 //Metis sync byte
 #define SYNC 0x7F
@@ -15,7 +24,7 @@
 
 #pragma once
 
-
+#define MAX_RX_COUNT  8
 
 namespace HermesIntf
 {
@@ -26,14 +35,24 @@ namespace HermesIntf
 
 		//typedef struct {
 			char *devname;
+			char emulation_id[9];
 			char mac[25];
 			char *status;
 			int  ver;
+			int  clock;
+			int  sample_rates[3];
 			char *ip_addr;
 			int max_recvrs;
 			int rxCount;
 			SOCKET sock;
 			struct sockaddr_in Hermes_addr;
+
+			// keep track of the selected parameters
+			int selected_LO_freqs[MAX_RX_COUNT];
+			int selected_sample_rate;
+			int selected_recv_count;
+			bool SlaveMode;
+
 		//} HermesInfo, *PHermesInfo;
 
 		//PHermesInfo PHInfo;
@@ -58,10 +77,18 @@ namespace HermesIntf
 		struct sockaddr_in Desired_addr;
 		struct sockaddr_in Skimmer_addr; 
 		unsigned int seq_no;
-		char Desired_mac[2];
+		unsigned char Desired_mac[2];
+		HANDLE hMutex;
 		
 		unsigned int NextSeq();
 		void ResetSeq();
+
+		//determine slave mode
+		void IsSlave();
+
+		//signal handler for POSIX
+		void WINAPI SignalHandler(int signal);
+	
 
 		//Attenuator variables
 		int Att;

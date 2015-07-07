@@ -98,6 +98,6 @@ namespace HermesIntf
 		};
 		void write_text_to_log_file( const std::string &text );
 		void rt_exception(const std::string &text);
-
+		float calculate_afedri_sr(float sr);
 }
 

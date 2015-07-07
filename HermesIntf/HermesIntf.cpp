@@ -6,9 +6,10 @@
 #include <stdexcept>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include "Hermes.h"
 #include <assert.h>
-
+#include <time.h>
 
 namespace HermesIntf
 {
@@ -197,7 +198,35 @@ namespace HermesIntf
 			 if (bytes_received > 0 && recvbuff[0] == (char) 0xEF && recvbuff[1] == (char) 0xFE && recvbuff[2] == (char) 0x01 && recvbuff[3] == (char) 0x06)
 			{
 				
-				
+
+				/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
+
+				//rx_seq = (recvbuff[4] & 0xFF << 24) + (recvbuff[5] & 0xFF << 16) + (recvbuff[6] & 0xFF << 8) + recvbuff[7] & 0xFF;
+
+				rx_seq++;
+				elapsed = GetTickCount()-start_time;
+
+
+				if (GetTickCount() - last_error >= 10000)
+				{
+					//rt_exception("Loosing packets!!!");
+					//write_text_to_log_file(std::to_string(rx_seq));
+					write_text_to_log_file(std::to_string(rx_seq*samplesPerFrame*2*1000/elapsed ));
+					last_error = GetTickCount();
+					rx_seq=0;
+					start_time = last_error;
+
+				}
+
+				//last_seq = rx_seq;
+
+				//continue;
+
+				bench */
+
+
+
+
 				//process UDP packet
 				int indx = 16;  //start of samples in recvbuff
 
@@ -264,16 +293,30 @@ namespace HermesIntf
 							
 							
 
-							//smplI = 12345;
-							//smplQ = 32101;
-
 							smplI = (recvbuff[indx] & 0xFF) << 24 | (recvbuff[indx+1] & 0xFF) << 16 | (recvbuff[indx+2] & 0xFF) << 8;
 							smplQ = (recvbuff[indx+3] & 0xFF) << 24 | (recvbuff[indx+4] & 0xFF) << 16 | (recvbuff[indx+5] & 0xFF) << 8;
 
+							/* memory aligned access testing
+							union {
+								int dummy;
+								char recvbuff[5000];
+							} recv;
+
+							memset(recv.recvbuff,0,sizeof(recv.recvbuff));
+							
+
+							smplI = * (int*) &recv.recvbuff[indx];
+							smplQ = * (int*) &recv.recvbuff[indx+4];
+
+							//smplI = (recv.recvbuff[indx] & 0xFF) << 24 | (recv.recvbuff[indx+1] & 0xFF) << 16 | (recv.recvbuff[indx+2] & 0xFF) << 8;
+							//smplQ = (recv.recvbuff[indx+3] & 0xFF) << 24 | (recv.recvbuff[indx+4] & 0xFF) << 16 | (recv.recvbuff[indx+5] & 0xFF) << 8;
+
+							*/
 							optr[j]->Re =  smplI;
 							optr[j]->Im = -smplQ;
+							
 
-							/*
+							/* debug code
 							char s_smplI[25]={0};
 							char s_smplQ[25]={0};
 							sprintf(s_smplI, "I: %02X:%02X:%02X, %i",
@@ -318,30 +361,7 @@ namespace HermesIntf
 
 			 //verify sequence #
 			
-			/* Calculate avg sample rate every 10 sec.  UDB buffer size tuning.
-				
-			//rx_seq = (recvbuff[4] & 0xFF << 24) + (recvbuff[5] & 0xFF << 16) + (recvbuff[6] & 0xFF << 8) + recvbuff[7] & 0xFF;
-			
-			 rx_seq++;
-			 elapsed = GetTickCount()-start_time;
-			 
-
-			if (GetTickCount() - last_error >= 10000)
-			{
-				//rt_exception("Loosing packets!!!");
-			//write_text_to_log_file(std::to_string(rx_seq));
-				write_text_to_log_file(std::to_string(rx_seq*samplesPerFrame*2*1000/elapsed ));
-				last_error = GetTickCount();
-				rx_seq=0;
-				start_time = last_error;
-				
-			}
-
-			//last_seq = rx_seq;
-
-			//continue;
-
-			*/
+		
 
 			
 		}
@@ -386,10 +406,48 @@ namespace HermesIntf
 			if (myHermes.Discover() == 0) {
 
 				sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
-				pInfo->MaxRecvCount = myHermes.max_recvrs;
-				pInfo->ExactRates[RATE_48KHZ]  =  48e3;
-				pInfo->ExactRates[RATE_96KHZ]  =  96e3;
-				pInfo->ExactRates[RATE_192KHZ] = 192e3;
+				
+				//workaround for hermes GUI bug. Force two min receivers
+				if (myHermes.max_recvrs == 1)
+				{
+					pInfo->MaxRecvCount = 2;
+				}
+				else
+				{
+					pInfo->MaxRecvCount = myHermes.max_recvrs;
+				}
+
+				if (strcmp(myHermes.devname, "Afedri") == 0) {
+
+					pInfo->ExactRates[RATE_48KHZ] = calculate_afedri_sr(48e3);
+					pInfo->ExactRates[RATE_96KHZ] = calculate_afedri_sr(96e3);
+					pInfo->ExactRates[RATE_192KHZ] = calculate_afedri_sr(192e3);
+
+					std::stringstream sstm;
+					sstm << "Afedri clock: " << myHermes.clock;
+					sstm << " Exact Sample rates: " << pInfo->ExactRates[RATE_48KHZ] << " "
+						<< pInfo->ExactRates[RATE_96KHZ] << " "
+						<< pInfo->ExactRates[RATE_192KHZ];
+					write_text_to_log_file(sstm.str());
+				}
+				else if (strcmp(myHermes.devname, "RTLdngl") == 0) {
+					pInfo->ExactRates[RATE_48KHZ] = myHermes.sample_rates[0];
+					pInfo->ExactRates[RATE_96KHZ] = myHermes.sample_rates[1];
+					pInfo->ExactRates[RATE_192KHZ] = myHermes.sample_rates[2];
+
+					std::stringstream sstm;
+					sstm << "RTL Dongle Exact Sample Rates " 
+						<< pInfo->ExactRates[RATE_48KHZ] << " "
+						<< pInfo->ExactRates[RATE_96KHZ] << " "
+						<< pInfo->ExactRates[RATE_192KHZ];
+					write_text_to_log_file(sstm.str());
+	
+				} else {
+
+					pInfo->ExactRates[RATE_48KHZ] = 48e3;
+					pInfo->ExactRates[RATE_96KHZ] = 96e3;
+					pInfo->ExactRates[RATE_192KHZ] = 192e3;
+				}
 
 				dbg+=(myHermes.devname); dbg+=" ";
 				dbg+=(myHermes.ip_addr); dbg+=" ";
@@ -430,7 +488,7 @@ namespace HermesIntf
 			} else if (myHermes.status != "Idle") {
 				rt_exception("HPSDR is busy sending data");
 				return;
-			} else if ((myHermes.devname == "Hermes" && myHermes.ver < 24) 
+			} else if ((myHermes.devname == "Hermes" && (myHermes.ver != 18 && myHermes.ver < 24)) 
 				|| (myHermes.devname == "Metis" && myHermes.ver < 26) 
 				|| (myHermes.devname == "Angelia" && myHermes.ver < 19)) 
 			{
@@ -438,7 +496,13 @@ namespace HermesIntf
 				return;
 			}
 
-			
+
+			if (gSet.RecvCount > myHermes.max_recvrs)
+			{
+				rt_exception("Too many receivers selected");
+				return;
+			}
+
 			myHermes.StartCapture(gSet.RecvCount,gSet.RateID);
 			
 			write_text_to_log_file("StartRx");
@@ -462,7 +526,7 @@ namespace HermesIntf
 				return;
 			}
 			write_text_to_log_file("Worker thread running");
-		
+		    
 
 			
 			//for Hermes/Angelia start the AGC loop
@@ -518,8 +582,19 @@ namespace HermesIntf
 		HERMESINTF_API void __stdcall SetRxFrequency(int Frequency, int Receiver)
 		{
 
-			// check
-			if ((myHermes.devname == NULL) || (Receiver < 0) || (Receiver >= myHermes.max_recvrs)) return;
+			// check slave mode
+
+			if (myHermes.SlaveMode == TRUE) {
+				rt_exception("Slave mode...");
+				return;
+			}
+
+			//if ((myHermes.devname == NULL) || (Receiver < 0) || (Receiver >= myHermes.max_recvrs))
+			if ((Receiver < 0) || (Receiver >= myHermes.max_recvrs))
+			{
+				rt_exception("Too many receivers selected");
+				return;
+			}
 
 			myHermes.SetLO(Receiver,Frequency);
 
@@ -546,9 +621,16 @@ namespace HermesIntf
 
 	void write_text_to_log_file( const std::string &text )
 	{
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		char buffer[30];
+
+		sprintf(buffer, "%04d-%02d-%02d %02d:%02d:%02d.%03d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+
 		std::ofstream log_file(
 			"HermesIntf_log_file.txt", std::ios_base::out | std::ios_base::app );
-		log_file << GetTickCount() << ": " << text << std::endl;
+		//log_file << GetTickCount() << ": " << text << std::endl;
+		log_file << buffer << ": " << text << std::endl;
 	}
 
 	void rt_exception(const std::string &text)
@@ -569,7 +651,23 @@ namespace HermesIntf
 	}
 
 	
+	float calculate_afedri_sr(float sr)
+	{
+		float dSR = sr;
+		float tmp_div = 0;
+		float floor_div = 0;
+		float floor_SR = 0;
+		tmp_div = myHermes.clock / (4 * dSR);
+		floor_div = floor(tmp_div);
+		if ((tmp_div - floor_div) >= 0.5) floor_div += 1;
+		dSR = myHermes.clock / (4 * floor_div);
+		floor_SR = floor(dSR);
+		if (dSR - floor_SR >= 0.5) floor_SR += 1;
+		return floor_SR;
+	}
 
+
+	
 
 }
 

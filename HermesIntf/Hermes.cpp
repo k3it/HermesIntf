@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string>
 #include <iostream>
+#include <sstream>
 
 namespace HermesIntf 
 {
@@ -16,6 +17,9 @@ namespace HermesIntf
 	{
 		#define MYPORT 1024  //port on which hermes sends and receives UDP packets
 		
+		// check if another HermesIntf is running
+		IsSlave();
+
 		//reset sequence number
 		ResetSeq();
 
@@ -58,8 +62,6 @@ namespace HermesIntf
 			return;
 		}
 
-
-
 		//write_text_to_log_file("constructor called");
 	}
 
@@ -69,6 +71,15 @@ namespace HermesIntf
 		StopCapture();
 		closesocket(sock);
 		WSACleanup();
+
+		CloseHandle(hMutex);
+		write_text_to_log_file("Cleaned up mutex");
+		
+	}
+
+	void Hermes::SignalHandler(int signal)
+	{
+		rt_exception("Caught exit signal");
 	}
 
 	unsigned int Hermes::NextSeq()
@@ -96,6 +107,29 @@ namespace HermesIntf
 		ResetSeq();
 
 		return 0;
+	}
+
+	//detect if another copy of DLL is running
+	void Hermes::IsSlave(void) {
+		//use mutex to determine if another copy of the DLL is running
+
+		LPCWSTR MY_MUTEX_NAME = L"HermesIntf_k3it_mutex";
+
+		//attempt to open mutex, if success we are in the slave mode
+		hMutex = ::OpenMutex(SYNCHRONIZE, FALSE, MY_MUTEX_NAME);
+		if (hMutex != NULL)
+		{
+			SlaveMode = TRUE;
+			CloseHandle(hMutex);
+			rt_exception("Slave mode - isslave()");
+			
+		} else {
+			hMutex = ::CreateMutex(NULL, FALSE, MY_MUTEX_NAME);
+			SlaveMode = FALSE;
+			write_text_to_log_file("MASTER Mode");
+			
+		}
+		
 	}
 
 
@@ -152,8 +186,9 @@ namespace HermesIntf
 
 		//C2: 0x00
 		cfgBytes.C2 = 0x00;
-		//C3: 0x1c, Alex Attenuator: 0dB, Preamp, LTC2208 Dither, LTC2208 Random, Alex Rx Antenna: none
-		cfgBytes.C3 = 0x1C;
+		//C3: 0x1c, Alex Attenuator: 0dB, Preamp, LTC2208 Dither = 0, LTC2208 Random = 1, Alex Rx Antenna: none
+		//cfgBytes.C3 = 0x1C;
+		cfgBytes.C3 = 0x14;
 
 		//C4: number of RX, Alex Tx Relay: Tx1, Duplex
 		cfgBytes.C4 = 0x04 | ((RxCount-1) << 3);
@@ -175,7 +210,11 @@ namespace HermesIntf
 
 	int Hermes::Discover(void)
 	{
-		
+		if (SlaveMode == TRUE) {
+			rt_exception("HermesIntf is in the slave mode");
+			return 1;
+		}
+
 		int len = sizeof(struct sockaddr_in);
  
 		char recvbuff[1500] = {0};
@@ -237,7 +276,7 @@ namespace HermesIntf
 		// wait for discovery packet for one second
 		long int start_time = GetTickCount();
 
-		while(GetTickCount() - start_time < 1000)
+		while(GetTickCount() - start_time < 1500)
 		{
 
 			// Look for the discovery response for 200 ms or so, if not - give up.
@@ -269,11 +308,15 @@ namespace HermesIntf
 					} else if (setMacDest() == 0 && ((recvbuff[7] & 0xFF) != Desired_mac[0] 
 								|| (recvbuff[8] & 0xFF) != Desired_mac[1]) ) 
 					{
+						//write_text_to_log_file(std::to_string(recvbuff[7] & 0xFF));
+						//write_text_to_log_file(std::to_string(recvbuff[8] & 0xFF));
 						continue;
 					}
 
 					
 					ver = recvbuff[9];
+					memcpy(emulation_id, &recvbuff[11], 8);
+					emulation_id[8] = '\0';
 
 					if (recvbuff[2] == (char)0x02)
 					{
@@ -297,7 +340,21 @@ namespace HermesIntf
 					break;
 				case 0x01:
 					devname = "Hermes";
-					max_recvrs = 5;
+					if (ver == 18)
+					{
+						max_recvrs = 7;
+					}
+					else if (ver == 25)
+					{
+						max_recvrs = 5;
+					}
+					else if (ver == 29)
+					{
+						max_recvrs = 4;
+					}
+					else {
+						max_recvrs = 4;
+					}
 					Att = 0;
 					MaxAtt = 31;
 					break;
@@ -309,16 +366,68 @@ namespace HermesIntf
 					break;
 				case 0x04:
 					devname = "Angelia";
-					max_recvrs = 5;
+					max_recvrs = 7;
 					Att = 0;
 					MaxAtt = 31;
-					break;
+				case 0x06:
+					devname = "HermesLT";
+					max_recvrs = 2;
+					Att = 0;
+					// Gain controlled automatically in FPGA with dither=on 
+					MaxAtt = 0;
+				break;
 				default:
 					devname = "Unknown brd ID";
 					max_recvrs = 2;
 				}
+
+				//special case for N1GP emulation ID for rtl_dongles
+				if (strcmp(emulation_id, "RTL_N1GP") == 0) {
+					devname = "RTLdngl";
+					max_recvrs = recvbuff[19];
+					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+					}
+					else {
+						sample_rates[0] = 48000;
+						sample_rates[1] = 96000;
+						sample_rates[2] = 192000;
+					}
+				
+					MaxAtt = 0;
+				}
+
+				//special case for Heremes Lite emulation HERMESLT
+				if (strcmp(emulation_id, "HERMESLT") == 0) {
+					devname = "HermesLT";
+					max_recvrs = recvbuff[19];
+					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+					}
+					else {
+						sample_rates[0] = 48000;
+						sample_rates[1] = 96000;
+						sample_rates[2] = 192000;
+					}
+				
+					MaxAtt = 0;
+				}
+
+				//special case for Afedri emulation ID for Afedri
+				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
+					devname = "Afedri";
+					max_recvrs = recvbuff[19];
+					clock = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+					MaxAtt = 0;
+				}
+
 				break;
 
+				
 			}
 		}
 
@@ -364,7 +473,17 @@ namespace HermesIntf
 		//five configuration packets C0-C4
 
 		//C0 MOX False, Select Receiver
-		char C0 = (RecvrID+2) << 1;
+	
+		//char C0 = (RecvrID + 2) << 1;
+		//N1GP: Yes, there is a bug for rcvr 8. I think this change will fix it (assuming RecvrID is zero based):
+		char C0 = (RecvrID < 7) ? (RecvrID + 2) << 1 : (RecvrID + 11) << 1;
+		
+		//workaround for v2.5 of Hermes where Rx5 is hard wired to the TX NCO
+		//if (ver == 25 & RecvrID == 4) {
+			//C0 = 0x02;  //NCO for TX
+		//}
+
+
 		
 		//C1-C4 sets frequency
 		char C1 = Frequency >> 24 & 0xFF;
@@ -394,9 +513,11 @@ namespace HermesIntf
 		cfgMSG[526] = C3;
 		cfgMSG[527] = C4;
 
+
 		//send the payload twice
+		sendto(sock, cfgMSG, sizeof(cfgMSG), 0, (sockaddr *)&Hermes_addr, sizeof(bcast_addr));
 		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
-		sendto(sock,cfgMSG,sizeof(cfgMSG),0,(sockaddr *)&Hermes_addr,sizeof(bcast_addr));
+
 		
 		//sleep a little, let NCO settle
 		Sleep(10);
@@ -481,6 +602,9 @@ namespace HermesIntf
 				Att = AttDb;
 
 				//debug
+				std::stringstream sstm;
+				sstm << "Step ATT: " << Att << "dB";
+				write_text_to_log_file(sstm.str());
 				//write_text_to_log_file("Attenuator set");
 				//write_text_to_log_file(std::to_string(Att));
 			}
@@ -514,6 +638,7 @@ namespace HermesIntf
 
 			char szFileName[MAX_PATH];
 			char fname[_MAX_FNAME];
+			unsigned long dest_addr;
 			
 			HMODULE hm = NULL;
 
@@ -534,7 +659,12 @@ namespace HermesIntf
 			if (location != std::string::npos) {
 				bcast_dest = bcast_dest.substr(location+1);
 				//write_text_to_log_file(bcast_dest);
-				if (inet_pton(AF_INET,bcast_dest.c_str(),&(Desired_addr.sin_addr)) == 1){
+				//use of inet_pton breaks windows XP compatibility 
+				//if (inet_pton(AF_INET,bcast_dest.c_str(),&(Desired_addr.sin_addr)) == 1){
+				
+				dest_addr = inet_addr(bcast_dest.c_str());
+				if (bcast_dest.size() > 6 && dest_addr != INADDR_NONE) {
+					Desired_addr.sin_addr.S_un.S_addr = dest_addr;
 					write_text_to_log_file("IP Address DLL Filter found");
 					return 0;
 				}
@@ -574,9 +704,10 @@ namespace HermesIntf
 				mac_dest = mac_dest.substr(location+1);
 				//write_text_to_log_file(mac_dest);
 				if (mac_dest.size() == 4){
-					if (sscanf((char *) &mac_dest, "%2hhx%2hhx", &Desired_mac[0], &Desired_mac[1]) == 2);
-					write_text_to_log_file("MAC Address DLL Filter found");
-					return 0;
+					if (sscanf((char *)&mac_dest, "%2hhX%2hhX", &Desired_mac[0], &Desired_mac[1]) == 2) {
+						write_text_to_log_file("MAC Address DLL Filter found");
+						return 0;
+					}
 				}
 			}
 			//could not parse the address
