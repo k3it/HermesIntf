@@ -425,6 +425,11 @@ namespace HermesIntf
 					MaxAtt = 0;
 				}
 
+				//check that we have not exceeded MAX_RX_COUNT 
+				if (max_recvrs > MAX_RX_COUNT) {
+					max_recvrs = MAX_RX_COUNT;
+				}
+
 				break;
 
 				
