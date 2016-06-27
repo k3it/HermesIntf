@@ -18,7 +18,7 @@ namespace HermesIntf
 		#define MYPORT 1024  //port on which hermes sends and receives UDP packets
 		
 		// check if another HermesIntf is running
-		IsSlave();
+		// IsSlave();
 
 		//reset sequence number
 		ResetSeq();
@@ -72,8 +72,8 @@ namespace HermesIntf
 		closesocket(sock);
 		WSACleanup();
 
-		CloseHandle(hMutex);
-		write_text_to_log_file("Cleaned up mutex");
+		//CloseHandle(hMutex);
+		//write_text_to_log_file("Cleaned up mutex");
 		
 	}
 
@@ -210,10 +210,10 @@ namespace HermesIntf
 
 	int Hermes::Discover(void)
 	{
-		if (SlaveMode == TRUE) {
-			rt_exception("HermesIntf is in the slave mode");
-			return 1;
-		}
+		//if (SlaveMode == TRUE) {
+		//	rt_exception("HermesIntf is in the slave mode");
+		//	return 1;
+		//}
 
 		int len = sizeof(struct sockaddr_in);
  

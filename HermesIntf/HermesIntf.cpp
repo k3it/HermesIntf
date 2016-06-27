@@ -584,10 +584,10 @@ namespace HermesIntf
 
 			// check slave mode
 
-			if (myHermes.SlaveMode == TRUE) {
-				rt_exception("Slave mode...");
-				return;
-			}
+			//if (myHermes.SlaveMode == TRUE) {
+			//	rt_exception("Slave mode...");
+			//	return;
+			//}
 
 			//if ((myHermes.devname == NULL) || (Receiver < 0) || (Receiver >= myHermes.max_recvrs))
 			if ((Receiver < 0) || (Receiver >= myHermes.max_recvrs))
