@@ -417,6 +417,26 @@ namespace HermesIntf
 					MaxAtt = 0;
 				}
 
+				
+				//special case for Red Pitya emulation ID
+				if (strcmp(emulation_id, "R_PITAYA") == 0) {
+					devname = "RedPitaya";
+					max_recvrs = recvbuff[19];
+					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+					}
+					else {
+						sample_rates[0] = 48000;
+						sample_rates[1] = 96000;
+						sample_rates[2] = 192000;
+					}
+				
+					MaxAtt = 0;
+				}
+
+
 				//special case for Afedri emulation ID for Afedri
 				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
 					devname = "Afedri";
