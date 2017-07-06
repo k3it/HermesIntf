@@ -1,0 +1,23 @@
+LIBRARY HermesIntf.dll
+; The alias symbols provide compatiblity between MSVC and MinGW DLLs and EXE files.
+; See http://www.willus.com/mingw/yongweiwu_stdcall.html
+; de N6TV 5 July 2017 19:37 UTC
+EXPORTS
+    GetSdrInfo = GetSdrInfo@4 @1
+    GetSdrInfo@4 @2
+    ReadPort = ReadPort@4 @3
+    ReadPort@4 @4
+    SetCtrlBits = SetCtrlBits@4 @5
+    SetCtrlBits@4 @6
+    SetRxFrequency = SetRxFrequency@8 @7
+    SetRxFrequency@8 @8
+    StartRx = StartRx@4 @9
+    StartRx@4 @10
+    StopRx = StopRx@0 @11
+    StopRx@0 @12
+    _GetSdrInfo@4 = GetSdrInfo@4 @13
+    _ReadPort@4 = ReadPort@4 @14
+    _SetCtrlBits@4 = SetCtrlBits@4 @15
+    _SetRxFrequency@8 = SetRxFrequency@8 @16
+    _StartRx@4 = StartRx@4 @17
+    _StopRx@0 = StopRx@0 @18
