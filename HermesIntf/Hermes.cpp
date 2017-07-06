@@ -369,13 +369,14 @@ namespace HermesIntf
 					max_recvrs = 7;
 					Att = 0;
 					MaxAtt = 31;
+					break;
 				case 0x06:
 					devname = "HermesLT";
 					max_recvrs = 2;
 					Att = 0;
 					// Gain controlled automatically in FPGA with dither=on 
 					MaxAtt = 0;
-				break;
+					break;
 				default:
 					devname = "Unknown brd ID";
 					max_recvrs = 2;
