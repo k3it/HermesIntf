@@ -11,6 +11,21 @@
 #include <iostream>
 #include <sstream>
 
+// Shared static string literal constants, location will not change
+extern "C" const char  UNKNOWN_HPSDR[]  = "Unknown HPSDR";
+extern "C" const char  IDLE[]           = "Idle";
+extern "C" const char  SENDING_DATA[]   = "Sending Data";
+extern "C" const char  UNKNOWN_STATUS[] = "Unknown Status";
+extern "C" const char  METIS[]          = "Metis";
+extern "C" const char  HERMES[]         = "Hermes";
+extern "C" const char  GRIFFIN[]        = "Griffin";
+extern "C" const char  ANGELIA[]        = "Angelia";
+extern "C" const char  HERMESLT[]       = "HermesLT";
+extern "C" const char  UNKNOWN_BRD_ID[] = "Unknown brd ID";
+extern "C" const char  RTLDNGL[]        = "RTLdngl";
+extern "C" const char  REDPITAYA[]      = "RP";	// Was "RedPitaya" -- name too long for CWSL_Tee / Skimmer
+extern "C" const char  AFREDI[]         = "Afedri";
+
 namespace HermesIntf 
 {
 	Hermes::Hermes(void)
@@ -297,8 +312,11 @@ namespace HermesIntf
 					recvbuff[3] & 0xFF, recvbuff[4] & 0xFF, recvbuff[5] & 0xFF,
 					recvbuff[6] & 0xFF, recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
 					*/
-					sprintf(mac, "%02X:%02X",
-						recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
+					//sprintf(mac, "%02X:%02X",
+					//	recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
+
+					sprintf(mac, "%02X%02X%02X",
+						recvbuff[6] & 0xFF, recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
 
 					ip_addr = inet_ntoa(Hermes_addr.sin_addr);
 
@@ -320,12 +338,12 @@ namespace HermesIntf
 
 					if (recvbuff[2] == (char)0x02)
 					{
-						status = "Idle";
+						status = (char *) IDLE;
 					} else if (recvbuff[2] == (char)0x03) 
 					{ 
-						status = "Sending Data";
+						status = (char *) SENDING_DATA;
 					} else {
-						status = "Unknown Status";
+						status = (char *) UNKNOWN_STATUS;
 					}
 				
 				}
@@ -333,13 +351,13 @@ namespace HermesIntf
 				switch (recvbuff[10])
 				{
 				case 0x00:
-					devname = "Metis";
+					devname = (char *) METIS;
 					max_recvrs = 4;
 					Att = 0;
 					MaxAtt = 0;
 					break;
 				case 0x01:
-					devname = "Hermes";
+					devname = (char *) HERMES;
 					if (ver == 18)
 					{
 						max_recvrs = 7;
@@ -359,32 +377,32 @@ namespace HermesIntf
 					MaxAtt = 31;
 					break;
 				case 0x02:
-					devname = "Griffin";
+					devname = (char *) GRIFFIN;
 					max_recvrs = 2;
 					Att = 0;
 					MaxAtt = 31;
 					break;
 				case 0x04:
-					devname = "Angelia";
+					devname = (char *) ANGELIA;
 					max_recvrs = 7;
 					Att = 0;
 					MaxAtt = 31;
 					break;
 				case 0x06:
-					devname = "HermesLT";
+					devname = (char *) HERMESLT;
 					max_recvrs = 2;
 					Att = 0;
 					// Gain controlled automatically in FPGA with dither=on 
 					MaxAtt = 0;
 					break;
 				default:
-					devname = "Unknown brd ID";
+					devname = (char *) UNKNOWN_BRD_ID;
 					max_recvrs = 2;
 				}
 
 				//special case for N1GP emulation ID for rtl_dongles
 				if (strcmp(emulation_id, "RTL_N1GP") == 0) {
-					devname = "RTLdngl";
+					devname = (char *) RTLDNGL;
 					max_recvrs = recvbuff[19];
 					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
 						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
@@ -402,7 +420,7 @@ namespace HermesIntf
 
 				//special case for Heremes Lite emulation HERMESLT
 				if (strcmp(emulation_id, "HERMESLT") == 0) {
-					devname = "HermesLT";
+					devname = (char *) HERMESLT;
 					max_recvrs = recvbuff[19];
 					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
 						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
@@ -421,7 +439,7 @@ namespace HermesIntf
 				
 				//special case for Red Pitya emulation ID
 				if (strcmp(emulation_id, "R_PITAYA") == 0) {
-					devname = "RedPitaya";
+					devname = (char *) REDPITAYA;
 					max_recvrs = recvbuff[19];
 					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
 						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
@@ -440,7 +458,7 @@ namespace HermesIntf
 
 				//special case for Afedri emulation ID for Afedri
 				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
-					devname = "Afedri";
+					devname = (char *) AFREDI;
 					max_recvrs = recvbuff[19];
 					clock = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
 					MaxAtt = 0;
@@ -609,7 +627,7 @@ namespace HermesIntf
 				//five configuration packets C0-C4
 				//set C0 to Angelia second Att if needed
 
-				if (devname == "Angelia") {
+				if (devname == ANGELIA) {
 					C0 = (char) 0x16;
 					C1 = C4;
 					C4 = (char) 0x00;

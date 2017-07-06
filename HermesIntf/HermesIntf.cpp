@@ -10,6 +10,40 @@
 #include "Hermes.h"
 #include <assert.h>
 #include <time.h>
+#include <math.h>
+
+// String literal constants intialized in Hermes.cpp
+extern "C" const char UNKNOWN_HPSDR[];
+extern "C" const char IDLE[];
+extern "C" const char SENDING_DATA[];
+extern "C" const char UNKNOWN_STATUS[];
+extern "C" const char METIS[];
+extern "C" const char HERMES[];
+extern "C" const char GRIFFIN[];
+extern "C" const char ANGELIA[];
+extern "C" const char HERMESLT[];
+extern "C" const char UNKNOWN_BRD_ID[];
+extern "C" const char RTLDNGL[];
+extern "C" const char REDPITAYA[];
+extern "C" const char AFREDI[];
+
+// String buffer for device name
+char display_name[50];
+
+#ifdef __MINGW32__
+// patch for std::to_string to work around a known compile error bug in minGW:
+//  error: 'to_string' is not a member of 'std'
+// See https://stackoverflow.com/questions/12975341/to-string-is-not-a-member-of-std-says-g-mingw
+namespace patch
+{
+    template < typename T > std::string to_string( const T& n )
+    {
+        std::ostringstream stm ;
+        stm << n ;
+        return stm.str() ;
+    }
+}
+#endif
 
 namespace HermesIntf
 {
@@ -401,11 +435,11 @@ namespace HermesIntf
 			if (pInfo == NULL) return;
 
 			std::string dbg = "GetSdrInfo: ";
-			char display_name[50];
 
 			if (myHermes.Discover() == 0) {
 
-				sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
+				//sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
+				sprintf(display_name, "%s-%s v%d", myHermes.devname, myHermes.mac, myHermes.ver);
 				
 				//workaround for hermes GUI bug. Force two min receivers
 				if (myHermes.max_recvrs == 1)
@@ -417,7 +451,7 @@ namespace HermesIntf
 					pInfo->MaxRecvCount = myHermes.max_recvrs;
 				}
 
-				if (strcmp(myHermes.devname, "Afedri") == 0) {
+				if (strcmp(myHermes.devname, AFREDI) == 0) {
 
 					pInfo->ExactRates[RATE_48KHZ] = calculate_afedri_sr(48e3);
 					pInfo->ExactRates[RATE_96KHZ] = calculate_afedri_sr(96e3);
@@ -430,7 +464,7 @@ namespace HermesIntf
 						<< pInfo->ExactRates[RATE_192KHZ];
 					write_text_to_log_file(sstm.str());
 				}
-				else if (strcmp(myHermes.devname, "RTLdngl") == 0) {
+				else if (strcmp(myHermes.devname, RTLDNGL) == 0) {
 					pInfo->ExactRates[RATE_48KHZ] = myHermes.sample_rates[0];
 					pInfo->ExactRates[RATE_96KHZ] = myHermes.sample_rates[1];
 					pInfo->ExactRates[RATE_192KHZ] = myHermes.sample_rates[2];
@@ -453,11 +487,15 @@ namespace HermesIntf
 				dbg+=(myHermes.ip_addr); dbg+=" ";
 				dbg+=(myHermes.mac); dbg+=" ";
 				dbg+=(myHermes.status); dbg+=" v";
+#ifdef __MINGW32__
+				dbg+=(patch::to_string(myHermes.ver));
+#else
 				dbg+=(std::to_string(myHermes.ver));
+#endif
 				write_text_to_log_file(dbg);
 				pInfo->DeviceName = display_name;
 			} else {
-				pInfo->DeviceName = "Unknown HPSDR";
+				pInfo->DeviceName = (char *) UNKNOWN_HPSDR;
 				dbg += "No response from HPSDR";
 			}
 			write_text_to_log_file(dbg);
@@ -485,12 +523,12 @@ namespace HermesIntf
 			if (myHermes.status == NULL) {
 				rt_exception("Can't locate HPSDR device");
 				return;
-			} else if (myHermes.status != "Idle") {
+			} else if (myHermes.status != IDLE) {
 				rt_exception("HPSDR is busy sending data");
 				return;
-			} else if ((myHermes.devname == "Hermes" && (myHermes.ver != 18 && myHermes.ver < 24)) 
-				|| (myHermes.devname == "Metis" && myHermes.ver < 26) 
-				|| (myHermes.devname == "Angelia" && myHermes.ver < 19)) 
+			} else if ((myHermes.devname == HERMES && (myHermes.ver != 18 && myHermes.ver < 24)) 
+				|| (myHermes.devname == METIS && myHermes.ver < 26) 
+				|| (myHermes.devname == ANGELIA && myHermes.ver < 19)) 
 			{
 				rt_exception("Check FPGA firmware version");
 				return;
@@ -530,7 +568,7 @@ namespace HermesIntf
 
 			
 			//for Hermes/Angelia start the AGC loop
-			if (myHermes.devname == "Hermes" || myHermes.devname == "Angelia") {
+			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA) {
 
 				ghAgc = CreateThread(NULL, 0, Agc, NULL, 0, &gidAgc);
 				if (ghAgc == NULL)
@@ -599,9 +637,17 @@ namespace HermesIntf
 			myHermes.SetLO(Receiver,Frequency);
 
 			std::string dbg = "SetRxFrequency Rx# ";
+#ifdef __MINGW32__
+			dbg += patch::to_string(Receiver);
+#else
 			dbg += std::to_string(Receiver);
+#endif
 			dbg += " Frequency: ";
+#ifdef __MINGW32__
+			dbg += patch::to_string(Frequency);
+#else
 			dbg += std::to_string(Frequency);
+#endif
 			write_text_to_log_file(dbg);
 			
 		}
