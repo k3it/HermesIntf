@@ -98,6 +98,7 @@ Please send feedback to gokoyev+k3it@gmail.com
 ==========================================
 CHANGES
 ==========================================
+17.7.6 - Improved integration w/ CWSL_Tee, minor bug fixes, updated device names (N6TV)
 17.7.5 - fix Angelia board detection issue
 16.6.27 - add support for Red Pitaya
 16.3.5 - remove slave mode
