@@ -24,7 +24,9 @@ extern "C" const char  HERMESLT[]       = "HermesLT";
 extern "C" const char  UNKNOWN_BRD_ID[] = "Unknown brd ID";
 extern "C" const char  RTLDNGL[]        = "RTLdngl";
 extern "C" const char  REDPITAYA[]      = "RP";	// Was "RedPitaya" -- name too long for CWSL_Tee / Skimmer
-extern "C" const char  AFREDI[]         = "Afedri";
+extern "C" const char  AFEDRI[]         = "Afedri";
+extern "C" const char  ORION[]          = "Orion";
+extern "C" const char  ANAN10E[]        = "Anan10E";
 
 namespace HermesIntf 
 {
@@ -370,6 +372,12 @@ namespace HermesIntf
 					{
 						max_recvrs = 4;
 					}
+					else if (ver >= 15 && ver < 18 )
+					{
+						// ANAN10E board masquerades as a Hermes but sends a lower firmware version
+						max_recvrs = 2;
+						devname = (char *) ANAN10E;
+					}
 					else {
 						max_recvrs = 4;
 					}
@@ -384,6 +392,12 @@ namespace HermesIntf
 					break;
 				case 0x04:
 					devname = (char *) ANGELIA;
+					max_recvrs = 7;
+					Att = 0;
+					MaxAtt = 31;
+					break;
+				case 0x05:
+					devname = (char *) ORION;
 					max_recvrs = 7;
 					Att = 0;
 					MaxAtt = 31;
@@ -458,7 +472,7 @@ namespace HermesIntf
 
 				//special case for Afedri emulation ID for Afedri
 				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
-					devname = (char *) AFREDI;
+					devname = (char *) AFEDRI;
 					max_recvrs = recvbuff[19];
 					clock = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
 					MaxAtt = 0;

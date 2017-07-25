@@ -25,7 +25,9 @@ extern "C" const char HERMESLT[];
 extern "C" const char UNKNOWN_BRD_ID[];
 extern "C" const char RTLDNGL[];
 extern "C" const char REDPITAYA[];
-extern "C" const char AFREDI[];
+extern "C" const char AFEDRI[];
+extern "C" const char ORION[];
+extern "C" const char ANAN10E[];
 
 // String buffer for device name
 char display_name[50];
@@ -451,7 +453,7 @@ namespace HermesIntf
 					pInfo->MaxRecvCount = myHermes.max_recvrs;
 				}
 
-				if (strcmp(myHermes.devname, AFREDI) == 0) {
+				if (strcmp(myHermes.devname, AFEDRI) == 0) {
 
 					pInfo->ExactRates[RATE_48KHZ] = calculate_afedri_sr(48e3);
 					pInfo->ExactRates[RATE_96KHZ] = calculate_afedri_sr(96e3);
@@ -568,7 +570,7 @@ namespace HermesIntf
 
 			
 			//for Hermes/Angelia start the AGC loop
-			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA) {
+			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA || myHermes.devname == ORION || myHermes.devname == ANAN10E) {
 
 				ghAgc = CreateThread(NULL, 0, Agc, NULL, 0, &gidAgc);
 				if (ghAgc == NULL)
