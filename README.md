@@ -38,7 +38,7 @@ Hermes Lite:
 - 8 receivers with BeMicro CV A9 and N1GP firmware
 
 Red Pitaya
-- 6 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
+- 8 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
 
 Angelia:
 - 7 receivers
