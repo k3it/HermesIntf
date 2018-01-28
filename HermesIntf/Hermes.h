@@ -24,7 +24,7 @@
 
 #pragma once
 
-#define MAX_RX_COUNT  8
+#define MAX_RX_COUNT  16
 
 namespace HermesIntf
 {
@@ -63,6 +63,7 @@ namespace HermesIntf
 		int StartCapture(int RxCount, int SampleRate);
 		int Discover(void);
 		int SetLO(int RecvrID, int Frequency);
+		void SetADCs(int AdcMask);
 
 		//Attenuator control functions
 		void SetAtt(int AttDb);

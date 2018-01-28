@@ -23,7 +23,7 @@ namespace HermesIntf
 		// IqProc must be called BLOCKS_PER_SEC times per second
 #define BLOCKS_PER_SEC  93.75
 
-#define MAX_RX_COUNT  8
+#define MAX_RX_COUNT  16
 
 #pragma pack(push, 16) 
 		typedef struct {float Re, Im;} Cmplx;
@@ -94,6 +94,9 @@ namespace HermesIntf
 
 			// Set read port (do nothing)
 			HERMESINTF_API int __stdcall ReadPort(int PortNumber);
+
+			// Set Rx's ADC values
+			HERMESINTF_API void __stdcall SetAdc(int AdcMask);
 
 		};
 		void write_text_to_log_file( const std::string &text );

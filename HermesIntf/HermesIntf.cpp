@@ -440,9 +440,6 @@ namespace HermesIntf
 
 			if (myHermes.Discover() == 0) {
 
-				//sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
-				sprintf(display_name, "%s-%s v%d", myHermes.devname, myHermes.mac, myHermes.ver);
-				
 				//workaround for hermes GUI bug. Force two min receivers
 				if (myHermes.max_recvrs == 1)
 				{
@@ -495,6 +492,10 @@ namespace HermesIntf
 				dbg+=(std::to_string(myHermes.ver));
 #endif
 				write_text_to_log_file(dbg);
+
+				//sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
+				sprintf(display_name, "%s-%s v%drx%d", myHermes.devname, myHermes.mac, myHermes.ver, myHermes.max_recvrs);
+
 				pInfo->DeviceName = display_name;
 			} else {
 				pInfo->DeviceName = (char *) UNKNOWN_HPSDR;
@@ -652,6 +653,28 @@ namespace HermesIntf
 #endif
 			write_text_to_log_file(dbg);
 			
+		}
+
+		// Set All Rx's ADC values
+		HERMESINTF_API void __stdcall SetAdc(int AdcMask)
+		{
+
+			if ((AdcMask < 0) || (AdcMask > 65535))
+			{
+				rt_exception("ADC value invalid");
+				return;
+			}
+
+			myHermes.SetADCs(AdcMask);
+
+			std::string dbg = "SetAdc# ";
+#ifdef __MINGW32__
+			dbg += patch::to_string(AdcMask);
+#else
+			dbg += std::to_string(AdcMask);
+#endif
+			write_text_to_log_file(dbg);
+
 		}
 
 		HERMESINTF_API int __stdcall ReadPort(int PortNumber)
