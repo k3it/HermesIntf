@@ -35,7 +35,7 @@ Hermes Lite:
 - 8 receivers with BeMicro CV A9 and N1GP firmware
 
 Red Pitaya
-- 6 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
+- 8 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
 
 Angelia:
 - 7 receivers
@@ -114,6 +114,6 @@ CHANGES
 13.8.21 - improved AutoDiscovery on "multi-homed" PCs 
 13.8.19 - initial version
 
-Code snippets TNX to: Peter Parýzek (USRP code for skim server), VE3NEA, W7AY,
+Code snippets TNX to: Peter ParÃ½zek (USRP code for skim server), VE3NEA, W7AY,
 openHPSDR list, Wireshark plugin: NH6Z ... ...  
 too many to list :)
