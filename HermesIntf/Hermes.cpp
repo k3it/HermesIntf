@@ -404,7 +404,9 @@ namespace HermesIntf
 					break;
 				case 0x06:
 					devname = (char *) HERMESLT;
-					max_recvrs = 2;
+					// Hermes-Lite may have different number of receivers
+					// Always advertised here though
+					max_recvrs = recvbuff[19];
 					Att = 0;
 					// Gain controlled automatically in FPGA with dither=on 
 					MaxAtt = 0;
@@ -433,10 +435,14 @@ namespace HermesIntf
 				}
 
 				//special case for Heremes Lite emulation HERMESLT
+				//The Genuine Hermes Lite will send ID 0x06, handled above
+				//but some forks may still be using  8 bytes emulation id.
 				if (strcmp(emulation_id, "HERMESLT") == 0) {
 					devname = (char *) HERMESLT;
 					max_recvrs = recvbuff[19];
 					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						// nonstandard sample rates used by experimental N1GP fw
+						// the official HL boards will not reach this section of the code
 						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
 						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
 						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
