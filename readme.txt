@@ -35,7 +35,7 @@ Hermes Lite:
 - 8 receivers with BeMicro CV A9 and N1GP firmware
 
 Red Pitaya
-- 8 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
+- 6 receivers with http://pavel-demin.github.io/red-pitaya-notes/sdr-receiver-hpsdr/
 
 Angelia:
 - 7 receivers
@@ -98,6 +98,7 @@ Please send feedback to gokoyev+k3it@gmail.com
 ==========================================
 CHANGES
 ==========================================
+18.5.22 - Add support for variable number of receivers in board id 0x06 Hermes Lite
 17.7.24 - Add Orion and Anan10e, fix a typo
 17.7.6 - Improved integration w/ CWSL_Tee, minor bug fixes, updated device names (N6TV)
 17.7.5 - fix Angelia board detection issue
