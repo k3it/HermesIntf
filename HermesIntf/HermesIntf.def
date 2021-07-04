@@ -7,4 +7,3 @@ EXPORTS
    SetRxFrequency=_SetRxFrequency@8
    SetCtrlBits=_SetCtrlBits@4
    ReadPort=_ReadPort@4
-   SetAdc=_SetAdc@4

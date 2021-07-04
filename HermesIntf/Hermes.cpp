@@ -1,7 +1,6 @@
 
 
 #include "stdafx.h"
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include "Hermes.h"
 #include "HermesIntf.h"
 
@@ -241,7 +240,6 @@ namespace HermesIntf
 		sendMSG[0] = (char) 0xEF;
 		sendMSG[1] = (char) 0xFE;
 		sendMSG[2] = (char) 0x02;
-		bool specialCase = false;
 
 
 		//send out broadcast from each interface
@@ -406,7 +404,9 @@ namespace HermesIntf
 					break;
 				case 0x06:
 					devname = (char *) HERMESLT;
-					max_recvrs = 2;
+					// Hermes-Lite may have different number of receivers
+					// Always advertised here though
+					max_recvrs = recvbuff[19];
 					Att = 0;
 					// Gain controlled automatically in FPGA with dither=on 
 					MaxAtt = 0;
@@ -418,30 +418,7 @@ namespace HermesIntf
 
 				//special case for N1GP emulation ID for rtl_dongles
 				if (strcmp(emulation_id, "RTL_N1GP") == 0) {
-					specialCase = true;
-					devname = (char *)RTLDNGL;
-					MaxAtt = 0;
-				}
-				//special case for Hermes Lite emulation HERMESLT
-				else if (strcmp(emulation_id, "HERMESLT") == 0) {
-					specialCase = true;
-					devname = (char *)HERMESLT;
-					MaxAtt = 0;
-				}
-				//special case for Red Pitya emulation ID
-				else if (strcmp(emulation_id, "R_PITAYA") == 0) {
-					specialCase = true;
-					devname = (char *)REDPITAYA;
-					MaxAtt = 0;
-				}
-				//special case for Orion emulation ID
-				else if (strcmp(emulation_id, "ORION_16") == 0) {
-					specialCase = true;
-					devname = (char *)ORION;
-					MaxAtt = 31;
-				}
-
-				if (specialCase) {
+					devname = (char *) RTLDNGL;
 					max_recvrs = recvbuff[19];
 					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
 						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
@@ -453,7 +430,51 @@ namespace HermesIntf
 						sample_rates[1] = 96000;
 						sample_rates[2] = 192000;
 					}
+				
+					MaxAtt = 0;
 				}
+
+				//special case for Heremes Lite emulation HERMESLT
+				//The Genuine Hermes Lite will send ID 0x06, handled above
+				//but some forks may still be using  8 bytes emulation id.
+				if (strcmp(emulation_id, "HERMESLT") == 0) {
+					devname = (char *) HERMESLT;
+					max_recvrs = recvbuff[19];
+					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						// nonstandard sample rates used by experimental N1GP fw
+						// the official HL boards will not reach this section of the code
+						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+					}
+					else {
+						sample_rates[0] = 48000;
+						sample_rates[1] = 96000;
+						sample_rates[2] = 192000;
+					}
+				
+					MaxAtt = 0;
+				}
+
+				
+				//special case for Red Pitya emulation ID
+				if (strcmp(emulation_id, "R_PITAYA") == 0) {
+					devname = (char *) REDPITAYA;
+					max_recvrs = recvbuff[19];
+					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+					}
+					else {
+						sample_rates[0] = 48000;
+						sample_rates[1] = 96000;
+						sample_rates[2] = 192000;
+					}
+				
+					MaxAtt = 0;
+				}
+
 
 				//special case for Afedri emulation ID for Afedri
 				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
@@ -654,78 +675,6 @@ namespace HermesIntf
 			return;
 		}
 		
-		void Hermes::SetADCs(int Adc)
-		{
-			int i;
-			char bank[3] = { 0, };
-			char output[80];
-
-			for (i = 0; i < 4; i++)
-			{
-				bank[0] |= ((Adc >> i) & 1) << (i * 2);
-				bank[1] |= ((Adc >> (i + 4)) & 1) << (i * 2);
-			}
-
-			bank[2] = (Adc & 0xff00) >> 8;
-
-			sprintf(output, "ADC:%X rx1-4:%x rx5-8:%x rx9-16:%x",
-				Adc, bank[0], bank[1], bank[2]);
-
-			write_text_to_log_file(output);
-
-			//send adc message
-			//Configuration packet
-			char cfgMSG[1032] = { 0 };
-
-			//Metis packet hdr
-			cfgMSG[0] = (char)0xEF;
-			cfgMSG[1] = (char)0xFE;
-			cfgMSG[2] = (char)0x01;
-
-			//End point EP2
-			cfgMSG[3] = (char)0x02;
-
-			//next 4 bytes is the sequence num
-			unsigned int seq = NextSeq();
-			cfgMSG[4] = seq >> 24 & 0xFF;
-			cfgMSG[5] = seq >> 8 & 0xFF;
-			cfgMSG[6] = seq >> 16 & 0xFF;
-			cfgMSG[7] = seq & 0xFF;
-
-			//now three sync packets
-			cfgMSG[8] = (char)SYNC;
-			cfgMSG[9] = (char)SYNC;
-			cfgMSG[10] = (char)SYNC;
-
-			//five configuration packets C0-C4
-
-			//C0 MOX False, Select Hermes ADC
-			cfgMSG[11] = 0x1C;
-			cfgMSG[12] = bank[0];
-			cfgMSG[13] = bank[1];
-			cfgMSG[14] = 0;
-			cfgMSG[15] = bank[2];
-
-			//fast forward to the next frame
-			//now three sync packets
-			cfgMSG[520] = (char)SYNC;
-			cfgMSG[521] = (char)SYNC;
-			cfgMSG[522] = (char)SYNC;
-
-			cfgMSG[523] = cfgMSG[11];
-			cfgMSG[524] = cfgMSG[12];
-			cfgMSG[525] = cfgMSG[13];
-			cfgMSG[526] = cfgMSG[14];
-			cfgMSG[527] = cfgMSG[15];
-
-			//send the payload twice
-			sendto(sock, cfgMSG, sizeof(cfgMSG), 0, (sockaddr *)&Hermes_addr, sizeof(bcast_addr));
-			sendto(sock, cfgMSG, sizeof(cfgMSG), 0, (sockaddr *)&Hermes_addr, sizeof(bcast_addr));
-
-			//debug
-			return;
-		}
-
 		void Hermes::SetMaxAtt(void) {
 			SetAtt(MaxAtt);
 			return;
