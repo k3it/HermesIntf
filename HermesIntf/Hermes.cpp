@@ -507,6 +507,12 @@ namespace HermesIntf
 						// Gain controlled automatically in FPGA with dither=on 
 						MaxAtt = 0;
 						break;
+					case 0x0A:
+						devname = (char*)ORION2;
+						max_recvrs = 7;
+						Att = 0;
+						MaxAtt = 31;
+						break;
 					default:
 						devname = (char *) UNKNOWN_BRD_ID;
 						max_recvrs = 2;
