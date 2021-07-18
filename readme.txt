@@ -2,6 +2,8 @@ HermesIntf.dll should be saved to the SkimSrv program directory.
 e.g. C:\Program Files (x86)\Afreet\SkimSrv 
 (see http://www.dxatlas.com/skimserver/)
 
+HPSDR Protocol v2 is now supported.Tnx N1GP
+
 The Interface will attach to the SDR that responds first to the Discovery
 Packet. However, it's possible to "lock" the DLL to a particular MAC or 
 IP address.  To do that HermesIntf.dll should be renamed as follows:
@@ -98,6 +100,7 @@ Please send feedback to gokoyev+k3it@gmail.com
 ==========================================
 CHANGES
 ==========================================
+21.7.18 - Add support for protocol 2 (N1GP)
 18.5.22 - Add support for variable number of receivers in board id 0x06 Hermes Lite
 17.7.24 - Add Orion and Anan10e, fix a typo
 17.7.6 - Improved integration w/ CWSL_Tee, minor bug fixes, updated device names (N6TV)
