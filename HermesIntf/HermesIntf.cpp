@@ -27,6 +27,7 @@ extern "C" const char RTLDNGL[];
 extern "C" const char REDPITAYA[];
 extern "C" const char AFEDRI[];
 extern "C" const char ORION[];
+extern "C" const char ORION2[];
 extern "C" const char ANAN10E[];
 
 // String buffer for device name
@@ -65,10 +66,11 @@ namespace HermesIntf
 	int gBlockInSamples = 0;
 
 	// Buffers for calling IQProc
-	CmplxA gData[MAX_RX_COUNT];
+	CmplxA gData1[MAX_RX_COUNT];
+	CmplxA gData2[MAX_RX_COUNT];
 
 	// Current length of data in Buffers for calling IQProc (in samples)
-	int gDataSamples = 0;
+	int gDataSamples[MAX_RX_COUNT] = { 0 };
 
 	// Instance of hermes
 	Hermes myHermes;
@@ -96,8 +98,10 @@ namespace HermesIntf
 		// free buffers for calling IQProc
 		for (i = 0; i < MAX_RX_COUNT; i++)
 		{// allocated ?
-			if (gData[i] != NULL) free(gData[i]);
-			gData[i] = NULL;
+			if (gData1[i] != NULL) free(gData1[i]);
+			gData1[i] = NULL;
+			if (gData2[i] != NULL) free(gData2[i]);
+			gData2[i] = NULL;
 		}
 
 		// decode sample rate
@@ -121,31 +125,35 @@ namespace HermesIntf
 		for (i = 0; i < MAX_RX_COUNT; i++)
 		{
 			// allocated ?
-			if (gData[i] != NULL) free(gData[i]);
+			if (gData1[i] != NULL) free(gData1[i]);
+			if (gData2[i] != NULL) free(gData2[i]);
 
-			// allocate buffer
-			gData[i] = (CmplxA) malloc(gBlockInSamples * sizeof(Cmplx));
+			// allocate buffers
+			gData1[i] = (CmplxA)_aligned_malloc(gBlockInSamples * sizeof(Cmplx), 16);
+			gData2[i] = (CmplxA)_aligned_malloc(gBlockInSamples * sizeof(Cmplx), 16);
 
 			// have we memory ?
-			if (gData[i] == NULL) 
+			if (gData1[i] == NULL || gData2[i] == NULL)
 			{// low memory
 				rt_exception("Low memory");
 				return(FALSE);
-			} 
+			}
 
 			// clear it
-			memset(gData[i], 0, gBlockInSamples * sizeof(Cmplx));
+			memset(gData1[i], 0, gBlockInSamples * sizeof(Cmplx));
+			memset(gData2[i], 0, gBlockInSamples * sizeof(Cmplx));
 		}
-		gDataSamples = 0;
+		gDataSamples[0] = 0;
 
 		// success
+		write_text_to_log_file("Alloc success");
 		return(TRUE);
 	}
 
 	DWORD WINAPI Agc(LPVOID lpParameter)
 	{
 		//reset attenuator
-		myHermes.SetAtt(0);
+		(myHermes.prot_ver == 1) ? myHermes.SetAtt(0) : myHermes.SetAtt2(0);
 		int lastAttChange = GetTickCount();
 
 		while(!gStopFlag)
@@ -168,7 +176,7 @@ namespace HermesIntf
 			Sleep(100);
 		}
 		
-		myHermes.SetAtt(0);
+		(myHermes.prot_ver == 1) ? myHermes.SetAtt(0) : myHermes.SetAtt2(0);
 		return(0);
 	}
 
@@ -190,8 +198,8 @@ namespace HermesIntf
 		Sleep(100);
 
 		// prepare pointers to IQ buffer
-		gDataSamples = 0;
-		for (i = 0; i < gNChan; i++) optr[i] = gData[i];
+		gDataSamples[0] = 0;
+		for (i = 0; i < gNChan; i++) optr[i] = gData1[i];
 
 		char recvbuff[1500] = {0};
 		int recvbufflen = 1500;
@@ -348,8 +356,8 @@ namespace HermesIntf
 							//smplQ = (recv.recvbuff[indx+3] & 0xFF) << 24 | (recv.recvbuff[indx+4] & 0xFF) << 16 | (recv.recvbuff[indx+5] & 0xFF) << 8;
 
 							*/
-							optr[j]->Re =  smplI;
-							optr[j]->Im = -smplQ;
+							optr[j]->Re = (float)smplI;
+							optr[j]->Im = (float)-smplQ;
 							
 
 							/* debug code
@@ -372,18 +380,18 @@ namespace HermesIntf
 							(optr[j])++;
 		
 						}
-						gDataSamples++;
+						gDataSamples[0]++;
 						indx += 2; //skip two mic bytes
 
 						// do we have enough data ?
-						if (gDataSamples >= gBlockInSamples)
+						if (gDataSamples[0] >= gBlockInSamples)
 						{
 							
 							// yes -> report it
-							gDataSamples = 0;
-							if (gSet.pIQProc != NULL) (*gSet.pIQProc)(gSet.THandle, gData);
+							gDataSamples[0] = 0;
+							if (gSet.pIQProc != NULL) (*gSet.pIQProc)(gSet.THandle, gData1);
 							// start filling of new data
-							for (int kount = 0; kount < gNChan; kount++) optr[kount] = gData[kount];
+							for (int kount = 0; kount < gNChan; kount++) optr[kount] = gData1[kount];
 							
 						}
 					}
@@ -408,6 +416,148 @@ namespace HermesIntf
 	}
 
 
+	DWORD WINAPI Worker2(LPVOID lpParameter)
+	{
+		Cmplx *inPtr[MAX_RX_COUNT], *outPtr[MAX_RX_COUNT];
+		int bucket = 0;
+		int gNChan = myHermes.rxCount;
+
+		int samplesperframe, sync = 0;
+
+		int indx, i, rx, rx_mask, rx_filled, bytes_received, seq[MAX_RX_COUNT];
+		int smplI, smplQ;
+
+		rx_mask = rx_filled = 0;
+		for (i = 0; i < gNChan; i++)
+		{
+			rx_mask |= 1 << i;
+			inPtr[i] = gData1[i];
+			outPtr[i] = gData1[i];
+			gDataSamples[i] = 0;
+		}
+
+		char recvbuff[2048] = { 0 };
+		int recvbufflen = 2048;
+		int len = sizeof(struct sockaddr_in);
+
+		// wait for a while ...
+		Sleep(300);
+
+		// main loop
+		while (!gStopFlag)
+		{
+			// read data block
+			bytes_received = recvfrom(myHermes.sock, recvbuff, recvbufflen, 0, (sockaddr *)&myHermes.Hermes_addr, &len);
+
+			if (bytes_received <= 0 && WSAGetLastError() == WSAETIMEDOUT)
+			{
+				rt_exception("Timed out waiting for UDP data 2");
+				break;
+			}
+
+			int sourceport = ntohs(myHermes.Hermes_addr.sin_port);
+
+			switch (sourceport) {
+				case MICROPHONE_DATA_TO_HOST: // use to sync to start of DDC data
+					sync = 1;
+					continue;
+//				case HIGH_PRIORITY_TO_HOST_PORT:
+//					if (recvbuff[5] & 1) ADC_overflow_count++;
+//					continue;
+				case RX_IQ_TO_HOST_PORT_0:
+				case RX_IQ_TO_HOST_PORT_1:
+				case RX_IQ_TO_HOST_PORT_2:
+				case RX_IQ_TO_HOST_PORT_3:
+				case RX_IQ_TO_HOST_PORT_4:
+				case RX_IQ_TO_HOST_PORT_5:
+				case RX_IQ_TO_HOST_PORT_6:
+				case RX_IQ_TO_HOST_PORT_7:
+					if (!sync) continue;
+
+					rx = sourceport - RX_IQ_TO_HOST_PORT_0;
+					samplesperframe = ((recvbuff[14] & 0xFF) << 8) + (recvbuff[15] & 0xFF);
+
+					//DEBUG
+					if (rx > gNChan || rx < 0)
+					{
+						write_text_to_log_file("rx");
+						write_text_to_log_file(std::to_string(rx));
+						continue;
+					}
+					if (samplesperframe != 238)
+					{
+						write_text_to_log_file("samplesperframe");
+						write_text_to_log_file(std::to_string(samplesperframe));
+						continue;
+					}
+
+#if 0
+					i = (recvbuff[0] & 0xFF) << 24 | (recvbuff[1] & 0xFF) << 16 | (recvbuff[2] & 0xFF) << 8 | recvbuff[3] & 0xFF;
+					if (seq[rx] + 1 != i)
+					{
+						seq[rx] = i;
+						continue;
+					}
+					seq[rx] = i;
+#endif
+
+					for (i = 0, indx = 16; i < samplesperframe; i++, indx += 6)
+					{
+
+						smplI = (recvbuff[indx] & 0xFF) << 24 | (recvbuff[indx + 1] & 0xFF) << 16 | (recvbuff[indx + 2] & 0xFF) << 8;
+						smplQ = (recvbuff[indx + 3] & 0xFF) << 24 | (recvbuff[indx + 4] & 0xFF) << 16 | (recvbuff[indx + 5] & 0xFF) << 8;
+
+						inPtr[rx]->Re = (float)smplI;
+						inPtr[rx]->Im = (float)-smplQ;
+
+// The protocol2 sends each rx's data in a separate packet so we need to store each rx's data
+// until we have all of them. The double buffer was an attempt to not loose any data when packets
+// got out of sequence.
+						(inPtr[rx])++;
+						gDataSamples[rx]++;
+
+						// wait and set when each rx reaches bucket full
+						if (gDataSamples[rx] == gBlockInSamples)
+						{
+							// if not already filled, fill and switch the bucket
+							if (!(rx_filled & (1 << rx)))
+							{
+								rx_filled |= 1 << rx;
+								bucket ^= 1 << rx;
+							}
+
+							// double buffer and keep track of which one is full
+							if (bucket & (1 << rx))
+							{
+								inPtr[rx] = gData2[rx];
+								outPtr[rx] = gData1[rx];
+							}
+							else
+							{
+								inPtr[rx] = gData1[rx];
+								outPtr[rx] = gData2[rx];
+							}
+							gDataSamples[rx] = 0;
+						}
+
+						// wait until we have all active rx bucket's filled
+						if (rx_filled == rx_mask)
+						{
+							// send it off
+							if (gSet.pIQProc != NULL) (*gSet.pIQProc)(gSet.THandle, outPtr);
+							rx_filled = 0;
+							//sync = 0;
+						}
+					}
+					break;
+				default:
+					break;
+			}
+		}
+		//Sleep(10);
+
+		return(0);
+	}
 
 	// DllMain function - Do we need this?
 	
@@ -416,7 +566,11 @@ namespace HermesIntf
 		switch (ul_reason_for_call)
 		{
 		case DLL_PROCESS_ATTACH:
-			for (int i = 0; i < MAX_RX_COUNT; i++) gData[i] = NULL;  
+			for (int i = 0; i < MAX_RX_COUNT; i++)
+			{
+				gData1[i] = NULL;
+				gData2[i] = NULL;
+			}
 			break;
 
 		case DLL_THREAD_ATTACH:
@@ -442,9 +596,9 @@ namespace HermesIntf
 
 				//sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
 				sprintf(display_name, "%s-%s v%d", myHermes.devname, myHermes.mac, myHermes.ver);
-				
+
 				//workaround for hermes GUI bug. Force two min receivers
-				if (myHermes.max_recvrs == 1)
+				if (myHermes.max_recvrs == 1 && myHermes.prot_ver == 1)
 				{
 					pInfo->MaxRecvCount = 2;
 				}
@@ -488,7 +642,8 @@ namespace HermesIntf
 				dbg+=(myHermes.devname); dbg+=" ";
 				dbg+=(myHermes.ip_addr); dbg+=" ";
 				dbg+=(myHermes.mac); dbg+=" ";
-				dbg+=(myHermes.status); dbg+=" v";
+				dbg+=(myHermes.status); dbg+=" protocol";
+				dbg+=(myHermes.prot_ver==1?"1":"2"); dbg += " v";
 #ifdef __MINGW32__
 				dbg+=(patch::to_string(myHermes.ver));
 #else
@@ -543,7 +698,7 @@ namespace HermesIntf
 				return;
 			}
 
-			myHermes.StartCapture(gSet.RecvCount,gSet.RateID);
+			(myHermes.prot_ver == 1) ? myHermes.StartCapture(gSet.RecvCount,gSet.RateID) : myHermes.StartCapture2(gSet.RecvCount,gSet.RateID);
 			
 			write_text_to_log_file("StartRx");
 			
@@ -558,7 +713,7 @@ namespace HermesIntf
 
 			// start worker thread
 			gStopFlag = false;
-			ghWrk = CreateThread(NULL, 0, Worker, NULL, 0, &gidWrk);
+			ghWrk = CreateThread(NULL, 0, (myHermes.prot_ver == 1) ? Worker : Worker2, NULL, 0, &gidWrk);
 			if (ghWrk == NULL)
 			{
 				// can't start
@@ -570,8 +725,7 @@ namespace HermesIntf
 
 			
 			//for Hermes/Angelia start the AGC loop
-			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA || myHermes.devname == ORION || myHermes.devname == ANAN10E) {
-
+			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA || myHermes.devname == ORION || myHermes.devname == ORION2 || myHermes.devname == ANAN10E) {
 				ghAgc = CreateThread(NULL, 0, Agc, NULL, 0, &gidAgc);
 				if (ghAgc == NULL)
 				{
@@ -613,8 +767,7 @@ namespace HermesIntf
 				write_text_to_log_file("AGC thread done");
 			}
 
-
-			myHermes.StopCapture();
+			(myHermes.prot_ver == 1) ? myHermes.StopCapture() : myHermes.StopCapture2();
 			write_text_to_log_file("StopRx");
 		}
 
@@ -636,7 +789,7 @@ namespace HermesIntf
 				return;
 			}
 
-			myHermes.SetLO(Receiver,Frequency);
+			(myHermes.prot_ver == 1) ? myHermes.SetLO(Receiver,Frequency) : myHermes.SetLO2(Receiver,Frequency);
 
 			std::string dbg = "SetRxFrequency Rx# ";
 #ifdef __MINGW32__

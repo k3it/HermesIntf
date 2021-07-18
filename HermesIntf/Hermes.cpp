@@ -1,6 +1,7 @@
 
 
 #include "stdafx.h"
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include "Hermes.h"
 #include "HermesIntf.h"
 
@@ -26,6 +27,7 @@ extern "C" const char  RTLDNGL[]        = "RTLdngl";
 extern "C" const char  REDPITAYA[]      = "RP";	// Was "RedPitaya" -- name too long for CWSL_Tee / Skimmer
 extern "C" const char  AFEDRI[]         = "Afedri";
 extern "C" const char  ORION[]          = "Orion";
+extern "C" const char  ORION2[]		= "Orion2";
 extern "C" const char  ANAN10E[]        = "Anan10E";
 
 namespace HermesIntf 
@@ -85,7 +87,7 @@ namespace HermesIntf
 	Hermes::~Hermes(void)
 	{
 		//write_text_to_log_file("destructor called");
-		StopCapture();
+		(prot_ver == 1) ? StopCapture() : StopCapture2();
 		closesocket(sock);
 		WSACleanup();
 
@@ -126,6 +128,21 @@ namespace HermesIntf
 		return 0;
 	}
 
+	int Hermes::StopCapture2(void)
+	{
+		write_text_to_log_file("StopCapture2");
+
+		//stop RX command
+		recvMSG[4] = 0x00; //!run
+		sendto(sock, recvMSG, sizeof(recvMSG), 0, (sockaddr *)&HP_addr, sizeof(HP_addr));
+		Sleep(10);
+
+		//reset frame seq num
+		ResetSeq();
+
+		return 0;
+	}
+
 	//detect if another copy of DLL is running
 	void Hermes::IsSlave(void) {
 		//use mutex to determine if another copy of the DLL is running
@@ -148,6 +165,81 @@ namespace HermesIntf
 		}
 		
 	}
+
+	int Hermes::StartCapture2(int RxCount, int SampleRate)
+	{
+
+		rxCount = RxCount;
+		//start RX command
+		char sendMSG[LONG_MSG] = { 0 };
+		unsigned int seq = NextSeq();
+		int i;
+		long phase;
+
+		// General msg
+		sendMSG[0] = seq >> 24 & 0xFF;
+		sendMSG[1] = seq >> 16 & 0xFF;
+		sendMSG[2] = seq >> 8 & 0xFF;
+		sendMSG[3] = seq & 0xFF;
+
+		sendMSG[37] = 0x08; //phase word (not freq)
+		sendMSG[38] = 0x00; //enable hardware watchdog timer RRK
+		sendMSG[58] = 0x00; //disable PA
+		sendMSG[59] = 0x03; //enable Alexs
+
+		sendto(sock, sendMSG, SHORT_MSG, 0, (sockaddr *)&Hermes_addr, sizeof(Hermes_addr));
+		Sleep(100);
+
+		memset(sendMSG, 0, LONG_MSG);
+
+		// DDC specific msg
+		sendMSG[4] = 2; // 2 ADCs
+
+		for (i = 0; i < rxCount; i++) {
+			sendMSG[7] |= 1 << i; //DDC enable
+			sendMSG[17 + (i * 6)] = 0; //ADC0
+
+			sendMSG[18 + (i * 6)] = 0;
+			if (SampleRate == RATE_48KHZ) {
+				sendMSG[19 + (i * 6)] = 48;
+			}
+			else if (SampleRate == RATE_96KHZ) {
+				sendMSG[19 + (i * 6)] = 96;
+			}
+			else if (SampleRate == RATE_192KHZ) {
+				sendMSG[19 + (i * 6)] = 192;
+			}
+			sendMSG[22 + (i * 6)] = 24;
+		}
+
+		sendto(sock, sendMSG, sizeof(sendMSG), 0, (sockaddr *)&Recv_addr, sizeof(Recv_addr));
+		Sleep(100);
+
+		// High Priority msg
+		phase = (long)((4294967296.0*(double)10000000) / 122880000.0); //10Mhz
+
+		memset(recvMSG, 0, LONG_MSG);
+
+		for (i = 0; i < rxCount; i++) {
+			recvMSG[9 + (i * 4)] = phase >> 24 & 0xff;
+			recvMSG[10 + (i * 4)] = phase >> 16 & 0xff;
+			recvMSG[11 + (i * 4)] = phase >> 8 & 0xff;
+			recvMSG[12 + (i * 4)] = phase & 0xff;
+		}
+
+		recvMSG[1431] = 0x10; //HF Bypass on OrionMKII BPF
+		recvMSG[1432] = 0x01; //Ant 1
+		recvMSG[1434] = 0x10; //HF Bypass on Alex 0
+		recvMSG[1443] = 0x00; //Step Attn 0 to 0dB
+		recvMSG[4] = 0x01; //run
+
+		sendto(sock, recvMSG, sizeof(recvMSG), 0, (sockaddr *)&HP_addr, sizeof(HP_addr));
+		Sleep(100);
+		write_text_to_log_file("StartCapture2");
+
+		return 0;
+	}
+
 
 
 	int Hermes::StartCapture(int RxCount, int SampleRate)
@@ -241,6 +333,7 @@ namespace HermesIntf
 		sendMSG[1] = (char) 0xFE;
 		sendMSG[2] = (char) 0x02;
 
+		sendMSG[4] = (char) 0x02;
 
 		//send out broadcast from each interface
 		
@@ -292,6 +385,8 @@ namespace HermesIntf
 
 		// wait for discovery packet for one second
 		long int start_time = GetTickCount();
+		devname = NULL;
+		prot_ver = 0;
 
 		while(GetTickCount() - start_time < 1500)
 		{
@@ -306,10 +401,13 @@ namespace HermesIntf
 
 				//recvfrom(sock,recvbuff,recvbufflen,0,NULL,0);
 
-				if (recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE) 
-				{
+				if (recvbuff[0] == (char)0xEF && recvbuff[1] == (char)0xFE)
+					prot_ver = 1;
+				else if (recvbuff[0] == (char)0x00 && recvbuff[1] == (char)0x00 && recvbuff[2] == (char)0x00 && recvbuff[3] == (char)0x00)
+					prot_ver = 2;
 
-
+				if (prot_ver == 1) {
+					write_text_to_log_file("Discover protocol1");
 					/* sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
 					recvbuff[3] & 0xFF, recvbuff[4] & 0xFF, recvbuff[5] & 0xFF,
 					recvbuff[6] & 0xFF, recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
@@ -348,150 +446,245 @@ namespace HermesIntf
 						status = (char *) UNKNOWN_STATUS;
 					}
 				
-				}
-
-				switch (recvbuff[10])
-				{
-				case 0x00:
-					devname = (char *) METIS;
-					max_recvrs = 4;
-					Att = 0;
-					MaxAtt = 0;
-					break;
-				case 0x01:
-					devname = (char *) HERMES;
-					if (ver == 18)
+					switch (recvbuff[10])
 					{
-						max_recvrs = 7;
-					}
-					else if (ver == 25)
-					{
-						max_recvrs = 5;
-					}
-					else if (ver == 29)
-					{
+					case 0x00:
+						devname = (char *) METIS;
 						max_recvrs = 4;
-					}
-					else if (ver >= 15 && ver < 18 )
-					{
-						// ANAN10E board masquerades as a Hermes but sends a lower firmware version
+						Att = 0;
+						MaxAtt = 0;
+						break;
+					case 0x01:
+						devname = (char *) HERMES;
+						if (ver == 18)
+						{
+							max_recvrs = 7;
+						}
+						else if (ver == 25)
+						{
+							max_recvrs = 5;
+						}
+						else if (ver == 29)
+						{
+							max_recvrs = 4;
+						}
+						else if (ver >= 15 && ver < 18 )
+						{
+							// ANAN10E board masquerades as a Hermes but sends a lower firmware version
+							max_recvrs = 2;
+							devname = (char *) ANAN10E;
+						}
+						else {
+							max_recvrs = 4;
+						}
+						Att = 0;
+						MaxAtt = 31;
+						break;
+					case 0x02:
+						devname = (char *) GRIFFIN;
 						max_recvrs = 2;
-						devname = (char *) ANAN10E;
+						Att = 0;
+						MaxAtt = 31;
+						break;
+					case 0x04:
+						devname = (char *) ANGELIA;
+						max_recvrs = 7;
+						Att = 0;
+						MaxAtt = 31;
+						break;
+					case 0x05:
+						devname = (char *) ORION;
+						max_recvrs = 7;
+						Att = 0;
+						MaxAtt = 31;
+						break;
+					case 0x06:
+						devname = (char *) HERMESLT;
+						// Hermes-Lite may have different number of receivers
+						// Always advertised here though
+						max_recvrs = recvbuff[19];
+						Att = 0;
+						// Gain controlled automatically in FPGA with dither=on 
+						MaxAtt = 0;
+						break;
+					case 0x0A:
+						devname = (char*)ORION2;
+						max_recvrs = 7;
+						Att = 0;
+						MaxAtt = 31;
+						break;
+					default:
+						devname = (char *) UNKNOWN_BRD_ID;
+						max_recvrs = 2;
+					}
+
+					//special case for N1GP emulation ID for rtl_dongles
+					if (strcmp(emulation_id, "RTL_N1GP") == 0) {
+						devname = (char *) RTLDNGL;
+						max_recvrs = recvbuff[19];
+						if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+							sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+							sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+							sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+						}
+						else {
+							sample_rates[0] = 48000;
+							sample_rates[1] = 96000;
+							sample_rates[2] = 192000;
+						}
+					
+						MaxAtt = 0;
+					}
+
+					//special case for Heremes Lite emulation HERMESLT
+					//The Genuine Hermes Lite will send ID 0x06, handled above
+					//but some forks may still be using  8 bytes emulation id.
+					if (strcmp(emulation_id, "HERMESLT") == 0) {
+						devname = (char *) HERMESLT;
+						max_recvrs = recvbuff[19];
+						if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+							// nonstandard sample rates used by experimental N1GP fw
+							// the official HL boards will not reach this section of the code
+							sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+							sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+							sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+						}
+						else {
+							sample_rates[0] = 48000;
+							sample_rates[1] = 96000;
+							sample_rates[2] = 192000;
+						}
+					
+						MaxAtt = 0;
+					}
+
+					
+					//special case for Red Pitya emulation ID
+					if (strcmp(emulation_id, "R_PITAYA") == 0) {
+						devname = (char *) REDPITAYA;
+						max_recvrs = recvbuff[19];
+						if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
+							sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+							sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
+							sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
+						}
+						else {
+							sample_rates[0] = 48000;
+							sample_rates[1] = 96000;
+							sample_rates[2] = 192000;
+						}
+					
+						MaxAtt = 0;
+					}
+
+
+					//special case for Afedri emulation ID for Afedri
+					if (strcmp(emulation_id, "AFEDRIRX") == 0) {
+						devname = (char *) AFEDRI;
+						max_recvrs = recvbuff[19];
+						clock = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
+						MaxAtt = 0;
+					}
+
+					//check that we have not exceeded MAX_RX_COUNT 
+					if (max_recvrs > MAX_RX_COUNT) {
+						max_recvrs = MAX_RX_COUNT;
+					}
+
+					break;
+				}
+				else if (prot_ver == 2) {
+					write_text_to_log_file("Discover protocol2");
+
+					/* sprintf(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+					recvbuff[5] & 0xFF, recvbuff[6] & 0xFF, recvbuff[7] & 0xFF,
+					recvbuff[8] & 0xFF, recvbuff[9] & 0xFF, recvbuff[10] & 0xFF);
+					*/
+					//sprintf(mac, "%02X:%02X",
+					//	recvbuff[7] & 0xFF, recvbuff[8] & 0xFF);
+
+					sprintf(mac, "%02X%02X%02X",
+						recvbuff[8] & 0xFF, recvbuff[9] & 0xFF, recvbuff[10] & 0xFF);
+
+					ip_addr = inet_ntoa(Hermes_addr.sin_addr);
+
+					if (setBcastDest() == 0 && Hermes_addr.sin_addr.S_un.S_addr != Desired_addr.sin_addr.S_un.S_addr)
+					{
+						continue;
+					}
+					else if (setMacDest() == 0 && ((recvbuff[9] & 0xFF) != Desired_mac[0]
+						|| (recvbuff[10] & 0xFF) != Desired_mac[1]))
+					{
+						//write_text_to_log_file(std::to_string(recvbuff[7] & 0xFF));
+						//write_text_to_log_file(std::to_string(recvbuff[8] & 0xFF));
+						continue;
+					}
+
+					ver = recvbuff[13]; //Firmware version
+
+					if (recvbuff[4] == (char)0x02)
+					{
+						status = (char *)IDLE;
+					}
+					else if (recvbuff[4] == (char)0x03)
+					{
+						status = (char *)SENDING_DATA;
 					}
 					else {
-						max_recvrs = 4;
+						status = (char *)UNKNOWN_STATUS;
 					}
-					Att = 0;
+
+					max_recvrs = recvbuff[20];
 					MaxAtt = 31;
-					break;
-				case 0x02:
-					devname = (char *) GRIFFIN;
-					max_recvrs = 2;
 					Att = 0;
-					MaxAtt = 31;
+					sample_rates[0] = 48000;
+					sample_rates[1] = 96000;
+					sample_rates[2] = 192000;
+
+					switch (recvbuff[11])
+					{
+						case 0x00:
+							devname = (char *)METIS;
+							MaxAtt = 0;
+							break;
+						case 0x01:
+							devname = (char *)HERMES;
+							break;
+						case 0x02:
+							devname = (char *)GRIFFIN;
+							break;
+						case 0x03:
+							devname = (char *)ANGELIA;
+							break;
+						case 0x04:
+							devname = (char *)ORION;
+							break;
+						case 0x05:
+							devname = (char *)ORION2;
+							break;
+						default:
+							devname = NULL;
+					}
+
+					//check that we have not exceeded MAX_RX_COUNT 
+					if (max_recvrs > MAX_RX_COUNT) {
+						max_recvrs = MAX_RX_COUNT;
+					}
+
+					memcpy(&Recv_addr, &Hermes_addr, sizeof(Hermes_addr));
+					Recv_addr.sin_port = htons(RECEIVER_SPECIFIC_REGISTERS_FROM_HOST_PORT);
+					memcpy(&HP_addr, &Hermes_addr, sizeof(Hermes_addr));
+					HP_addr.sin_port = htons(HIGH_PRIORITY_FROM_HOST_PORT);
+
+					char broadcast = '1';
+					setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &broadcast, sizeof(Hermes_addr));
+					for (int i = 0; i < max_recvrs; ++i)
+					{
+						memcpy(&Data_addr[i], &Hermes_addr, sizeof(Hermes_addr));
+						Data_addr[i].sin_port = htons(RX_IQ_TO_HOST_PORT_0 + i);
+					}
 					break;
-				case 0x04:
-					devname = (char *) ANGELIA;
-					max_recvrs = 7;
-					Att = 0;
-					MaxAtt = 31;
-					break;
-				case 0x05:
-					devname = (char *) ORION;
-					max_recvrs = 7;
-					Att = 0;
-					MaxAtt = 31;
-					break;
-				case 0x06:
-					devname = (char *) HERMESLT;
-					// Hermes-Lite may have different number of receivers
-					// Always advertised here though
-					max_recvrs = recvbuff[19];
-					Att = 0;
-					// Gain controlled automatically in FPGA with dither=on 
-					MaxAtt = 0;
-					break;
-				default:
-					devname = (char *) UNKNOWN_BRD_ID;
-					max_recvrs = 2;
 				}
-
-				//special case for N1GP emulation ID for rtl_dongles
-				if (strcmp(emulation_id, "RTL_N1GP") == 0) {
-					devname = (char *) RTLDNGL;
-					max_recvrs = recvbuff[19];
-					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
-						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
-						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
-						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
-					}
-					else {
-						sample_rates[0] = 48000;
-						sample_rates[1] = 96000;
-						sample_rates[2] = 192000;
-					}
-				
-					MaxAtt = 0;
-				}
-
-				//special case for Heremes Lite emulation HERMESLT
-				//The Genuine Hermes Lite will send ID 0x06, handled above
-				//but some forks may still be using  8 bytes emulation id.
-				if (strcmp(emulation_id, "HERMESLT") == 0) {
-					devname = (char *) HERMESLT;
-					max_recvrs = recvbuff[19];
-					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
-						// nonstandard sample rates used by experimental N1GP fw
-						// the official HL boards will not reach this section of the code
-						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
-						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
-						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
-					}
-					else {
-						sample_rates[0] = 48000;
-						sample_rates[1] = 96000;
-						sample_rates[2] = 192000;
-					}
-				
-					MaxAtt = 0;
-				}
-
-				
-				//special case for Red Pitya emulation ID
-				if (strcmp(emulation_id, "R_PITAYA") == 0) {
-					devname = (char *) REDPITAYA;
-					max_recvrs = recvbuff[19];
-					if ((recvbuff[22] != 0x00) & (recvbuff[22] != 0x01)) {
-						sample_rates[0] = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
-						sample_rates[1] = (recvbuff[24] & 0xFF) << 24 | (recvbuff[25] & 0xFF) << 16 | (recvbuff[26] & 0xFF) << 8 | (recvbuff[27] & 0xFF);
-						sample_rates[2] = (recvbuff[28] & 0xFF) << 24 | (recvbuff[29] & 0xFF) << 16 | (recvbuff[30] & 0xFF) << 8 | (recvbuff[31] & 0xFF);
-					}
-					else {
-						sample_rates[0] = 48000;
-						sample_rates[1] = 96000;
-						sample_rates[2] = 192000;
-					}
-				
-					MaxAtt = 0;
-				}
-
-
-				//special case for Afedri emulation ID for Afedri
-				if (strcmp(emulation_id, "AFEDRIRX") == 0) {
-					devname = (char *) AFEDRI;
-					max_recvrs = recvbuff[19];
-					clock = (recvbuff[20] & 0xFF) << 24 | (recvbuff[21] & 0xFF) << 16 | (recvbuff[22] & 0xFF) << 8 | (recvbuff[23] & 0xFF);
-					MaxAtt = 0;
-				}
-
-				//check that we have not exceeded MAX_RX_COUNT 
-				if (max_recvrs > MAX_RX_COUNT) {
-					max_recvrs = MAX_RX_COUNT;
-				}
-
-				break;
-
-				
 			}
 		}
 
@@ -499,16 +692,31 @@ namespace HermesIntf
 		nonblocking = 0;    /* Flag to make socket blocking */
 		ioctlsocket(sock, FIONBIO, &nonblocking);
 
-
-		if (devname != NULL) 
-		{
-			return 0;
-		} else {
-			return 1;
-		}
+		return (devname != NULL) ? 0 : 1;
 	}
 
+	void Hermes::Ping()
+	{
+		// reset the Network HW watchdog timer by resending rx specific msg
+		sendto(sock, recvMSG, sizeof(recvMSG), 0, (sockaddr *)&HP_addr, sizeof(HP_addr));
+	}
 
+	int Hermes::SetLO2(int RecvrID, int Frequency)
+	{
+		long phase;
+		write_text_to_log_file("SetLO2");
+		phase = (long)((4294967296.0*(double)Frequency) / 122880000.0); //convert to phase
+
+		recvMSG[9 + (RecvrID * 4)] = phase >> 24 & 0xff;
+		recvMSG[10 + (RecvrID * 4)] = phase >> 16 & 0xff;
+		recvMSG[11 + (RecvrID * 4)] = phase >> 8 & 0xff;
+		recvMSG[12 + (RecvrID * 4)] = phase & 0xff;
+
+		sendto(sock, recvMSG, sizeof(recvMSG), 0, (sockaddr *)&HP_addr, sizeof(HP_addr));
+
+		return 0;
+	}
+		
 	int Hermes::SetLO(int RecvrID, int Frequency)
 	{
 		//Configuration packet
@@ -587,6 +795,24 @@ namespace HermesIntf
 		Sleep(10);
 		return 0;
 		
+	}
+		
+	void Hermes::SetAtt2(int AttDb) 
+	{
+		if (AttDb >= 0 && AttDb <= MaxAtt) 
+		{
+			//set att
+			Att = AttDb;
+
+			recvMSG[1443] = AttDb & 0xFF;
+			sendto(sock, recvMSG, sizeof(recvMSG), 0, (sockaddr *)&HP_addr, sizeof(HP_addr));
+
+			//debug
+			std::stringstream sstm;
+			sstm << "Step ATT2: " << Att << "dB";
+			write_text_to_log_file(sstm.str());
+		}
+		return;
 	}
 		
 		void Hermes::SetAtt(int AttDb) 
@@ -676,20 +902,20 @@ namespace HermesIntf
 		}
 		
 		void Hermes::SetMaxAtt(void) {
-			SetAtt(MaxAtt);
+			(prot_ver == 1) ? SetAtt(MaxAtt) : SetAtt2(MaxAtt);
 			return;
 		}
 
 		void Hermes::IncrAtt(void) {
 			if (Att < MaxAtt) {
-				SetAtt(Att+1);
+			(prot_ver == 1) ? SetAtt(Att+1) : SetAtt2(Att+1);
 			}
 			return;
 		}
 
 		void Hermes::DecrAtt(void) {
 			if (Att > 0) {
-				SetAtt(Att-1);
+			(prot_ver == 1) ? SetAtt(Att-1) : SetAtt2(Att-1);
 			}
 			return;
 		}
