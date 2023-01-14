@@ -329,11 +329,12 @@ namespace HermesIntf
 		char recvbuff[1500] = {0};
 		int recvbufflen = 1500;
 		char sendMSG[63] = {0};
+		char sendMSG_P2[60] = {0};
 		sendMSG[0] = (char) 0xEF;
 		sendMSG[1] = (char) 0xFE;
 		sendMSG[2] = (char) 0x02;
 
-		sendMSG[4] = (char) 0x02;
+		sendMSG_P2[4] = (char) 0x02;
 
 		//send out broadcast from each interface
 		
@@ -370,9 +371,11 @@ namespace HermesIntf
 			//calculate magic broadcast address
 			bcast_addr.sin_addr.S_un.S_addr = pAddress->sin_addr.S_un.S_addr | (~ pMask->sin_addr.S_un.S_addr);
 
-			//send discovery
+			//send discovery P1
 			sendto(sock,sendMSG,sizeof(sendMSG),0,(sockaddr *)&bcast_addr,sizeof(bcast_addr));
 
+			//send discovery P2
+			sendto(sock, sendMSG_P2, sizeof(sendMSG_P2), 0, (sockaddr*)& bcast_addr, sizeof(bcast_addr));
 		}
 
 		
