@@ -28,6 +28,7 @@ extern "C" const char REDPITAYA[];
 extern "C" const char AFEDRI[];
 extern "C" const char ORION[];
 extern "C" const char ORION2[];
+extern "C" const char SATURN[];
 extern "C" const char ANAN10E[];
 
 // String buffer for device name
@@ -725,7 +726,8 @@ namespace HermesIntf
 
 			
 			//for Hermes/Angelia start the AGC loop
-			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA || myHermes.devname == ORION || myHermes.devname == ORION2 || myHermes.devname == ANAN10E) {
+			if (myHermes.devname == HERMES || myHermes.devname == ANGELIA || myHermes.devname == ORION ||
+				myHermes.devname == ORION2 || myHermes.devname == SATURN || myHermes.devname == ANAN10E) {
 				ghAgc = CreateThread(NULL, 0, Agc, NULL, 0, &gidAgc);
 				if (ghAgc == NULL)
 				{
