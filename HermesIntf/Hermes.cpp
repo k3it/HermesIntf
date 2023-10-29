@@ -27,7 +27,8 @@ extern "C" const char  RTLDNGL[]        = "RTLdngl";
 extern "C" const char  REDPITAYA[]      = "RP";	// Was "RedPitaya" -- name too long for CWSL_Tee / Skimmer
 extern "C" const char  AFEDRI[]         = "Afedri";
 extern "C" const char  ORION[]          = "Orion";
-extern "C" const char  ORION2[]		= "Orion2";
+extern "C" const char  ORION2[]         = "Orion2";
+extern "C" const char  SATURN[]         = "Saturn";
 extern "C" const char  ANAN10E[]        = "Anan10E";
 
 namespace HermesIntf 
@@ -448,7 +449,7 @@ namespace HermesIntf
 					} else {
 						status = (char *) UNKNOWN_STATUS;
 					}
-				
+
 					switch (recvbuff[10])
 					{
 					case 0x00:
@@ -664,6 +665,9 @@ namespace HermesIntf
 							break;
 						case 0x05:
 							devname = (char *)ORION2;
+							break;
+						case 0x0A:
+							devname = (char*)SATURN;
 							break;
 						default:
 							devname = NULL;
