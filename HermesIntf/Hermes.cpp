@@ -454,7 +454,7 @@ namespace HermesIntf
 					{
 					case 0x00:
 						devname = (char *) METIS;
-						max_recvrs = 4;
+						max_recvrs = (ver < 10) ? 8 : 6;
 						Att = 0;
 						MaxAtt = 0;
 						break;

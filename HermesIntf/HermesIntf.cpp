@@ -685,7 +685,7 @@ namespace HermesIntf
 				rt_exception("HPSDR is busy sending data");
 				return;
 			} else if ((myHermes.devname == HERMES && (myHermes.ver != 18 && myHermes.ver < 24)) 
-				|| (myHermes.devname == METIS && myHermes.ver < 26) 
+				|| (myHermes.devname == METIS && (myHermes.ver > 10 && myHermes.ver < 30))
 				|| (myHermes.devname == ANGELIA && myHermes.ver < 19)) 
 			{
 				rt_exception("Check FPGA firmware version");
