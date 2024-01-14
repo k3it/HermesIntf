@@ -32,7 +32,7 @@ BEGIN
             VALUE "LegalCopyright", "Vasiliy Gokoyev K3IT, 2021"
             VALUE "OriginalFilename", "HermesIntf.dll"
             VALUE "ProductName", "HPSDR Skimmer Server Interface"
-            VALUE "ProductVersion", "21.7.18.1"
+            VALUE "ProductVersion", "24.1.13.1"
         END
     END
     BLOCK "VarFileInfo"

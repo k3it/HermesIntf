@@ -100,6 +100,7 @@ Please send feedback to gokoyev+k3it@gmail.com
 ==========================================
 CHANGES
 ==========================================
+24.1.13 - Add Saturn Support, discovery packet improvement, update to VS 2022
 21.7.18 - Add support for protocol 2 (N1GP)
 18.5.22 - Add support for variable number of receivers in board id 0x06 Hermes Lite
 17.7.24 - Add Orion and Anan10e, fix a typo
