@@ -600,7 +600,8 @@ namespace HermesIntf
 			if (myHermes.Discover() == 0) {
 
 				//sprintf(display_name, "%s v%d %s", myHermes.devname, myHermes.ver, myHermes.mac);
-				sprintf(display_name, "%s-%s v%d", myHermes.devname, myHermes.mac, myHermes.ver);
+				sprintf(display_name, "%s%c%s v%d", myHermes.devname, (myHermes.prot_ver == 1 ? '-' : '='),
+					myHermes.mac, myHermes.ver, myHermes.prot_ver);
 
 				//workaround for hermes GUI bug. Force two min receivers
 				if (myHermes.max_recvrs == 1 && myHermes.prot_ver == 1)

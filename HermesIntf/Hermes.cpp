@@ -676,6 +676,9 @@ namespace HermesIntf
 						case 0x05:
 							devname = (char *)ORION2;
 							break;
+						case 0x06:
+							devname = (char*)HERMESLT;
+							break;
 						case 0x0A:
 							devname = (char*)SATURN;
 							break;
